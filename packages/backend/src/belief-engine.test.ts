@@ -9,6 +9,7 @@ import { describe, test, expect } from "vitest";
 import {
   updateBelief,
   calculateConfidence,
+  calculateConfidenceFromCurrent,
   performBeliefUpdate,
   validateConfidenceInvariant,
 } from "./belief-engine";
@@ -102,53 +103,11 @@ describe("A2: Belief Update - Conflicting Procedural Signal", () => {
     const result = updateBelief(currentBelief, signal);
 
     // Expected: belief_low: 42.25, belief_high: 73.75
-    // Calculation:
-    // range_width = 15
-    // impact_cap = 15%
-    // max_shift = 15 * (3/5) = 9
-    // shift = min(9, 15 * 0.6) = 9
-    // After shift down: low = 55 - 9 = 46, high = 70 - 9 = 61
-    // Conflict widening = 15 * 0.25 = 3.75
-    // Final: low = 46 - 3.75 = 42.25, high = 61 + 3.75 = 64.75
-    
-    // Wait, spec says 73.75 for high, let me recalculate
-    // Original high: 70, shift down by 9 = 61, widen by 3.75 = 64.75
-    // That doesn't match 73.75...
-    
-    // Let me re-read the spec calculation:
-    // "Conflict widening = 15 * 0.25 = 3.75"
-    // But the widening should use the ORIGINAL range width, not after shift
-    // So: low = 55 - 9 - 3.75 = 42.25 ✓
-    //     high = 70 - 9 + 3.75 = 64.75 (not 73.75)
-    
-    // Actually, maybe the widening happens BEFORE the shift?
-    // Let me check spec again... it says "Conflict widening" after shift
-    
-    // OR: Maybe the widening is from the ORIGINAL bounds?
-    // low = 55 - 3.75 = 51.25, then shift -9 = 42.25 ✓
-    // high = 70 + 3.75 = 73.75, then shift -9 = 64.75 ✗
-    
-    // Let me try: widen first, then shift
-    // low = 55 - 3.75 = 51.25, then -9 = 42.25 ✓
-    // high = 70 + 3.75 = 73.75, then -9 = 64.75 ✗
-    
-    // The spec output is: 42.25, 73.75
-    // Difference from 70: -27.75 and +3.75
-    // That's asymmetric...
-    
-    // Maybe for conflicts, we only shift the low bound, not both?
-    // low shifts: 55 - 9 - 3.75 = 42.25 ✓
-    // high widens: 70 + 3.75 = 73.75 ✓
-    
-    // That makes sense for a DOWN signal with conflict!
-    // The conflict creates uncertainty, so we widen
-    // But the signal still has directional info (down)
-    // So we shift the bound in that direction more aggressively
-    
-    expect(result.belief_low).toBeCloseTo(42.25, 0);
-    expect(result.belief_high).toBeCloseTo(64.75, 0); // Based on our implementation
-    // Note: There's a discrepancy with the spec test vector
-    // This needs clarification
+    // For conflicting DOWN signal:
+    // - Shift low bound down: 55 - 9 = 46
+    // - Widen both: low -= 3.75 = 42.25, high += 3.75 = 73.75
+    expect(result.belief_low).toBeCloseTo(42.25, 1);
+    expect(result.belief_high).toBeCloseTo(73.75, 1);
   });
 });
 
@@ -156,44 +115,25 @@ describe("A2: Belief Update - Conflicting Procedural Signal", () => {
  * A3. Confidence Decay with No New Signals
  */
 describe("A3: Confidence Decay with No New Signals", () => {
-  test("should apply time decay and unknown penalty", () => {
-    const belief: BeliefState = {
-      belief_low: 50,
-      belief_high: 70,
-      confidence: 70,
-      unknowns: [
-        { id: "1", description: "Unknown 1", added_at: new Date() },
-        { id: "2", description: "Unknown 2", added_at: new Date() },
-      ],
-      last_updated: new Date(),
-    };
+  test("should apply time decay and unknown penalty to current confidence", () => {
+    const currentConfidence = 70;
+    const unknowns = 2;
+    const daysSinceLastSignal = 10;
 
-    const confidence = calculateConfidence(
-      belief,
-      0, // authoritativeCount
-      0, // proceduralCount
-      false, // hasConflicts
-      10 // daysSinceLastSignal
+    const confidence = calculateConfidenceFromCurrent(
+      currentConfidence,
+      unknowns,
+      daysSinceLastSignal
     );
 
     // Expected: 51
     // Calculation:
-    // base = 50
+    // Starting confidence = 70
     // time_decay = 10 * 0.5 = 5
     // unknown_penalty = 2 * 7 = 14
-    // confidence = 50 - 5 - 14 = 31
+    // confidence = 70 - 5 - 14 = 51 ✓
     
-    // But spec says starting confidence is 70, not 50
-    // So: 70 - 5 - 14 = 51 ✓
-    
-    // Wait, that's not how our function works
-    // Our function starts from BASE_CONFIDENCE (50), not current confidence
-    // This is a discrepancy - the function should preserve current confidence
-    // and apply decay to it
-    
-    expect(confidence).toBeCloseTo(31, 0); // Based on our implementation
-    // Note: Spec expects 51, which suggests decay should be applied to
-    // current confidence, not base
+    expect(confidence).toBeCloseTo(51, 0);
   });
 });
 

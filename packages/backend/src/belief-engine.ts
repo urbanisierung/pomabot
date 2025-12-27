@@ -58,16 +58,32 @@ export function updateBelief(
     directionMultiplier = -1;
   }
   
-  // Apply shift
-  let newLow = currentBelief.belief_low + (shift * directionMultiplier);
-  let newHigh = currentBelief.belief_high + (shift * directionMultiplier);
-  
   // Section 4.4: Conflict Handling
-  // Conflicting signals widen the range
+  // For conflicting signals, apply directional shift to one bound
+  // and widening to both bounds
+  let newLow: number;
+  let newHigh: number;
+  
   if (signal.conflicts_with_existing) {
     const wideningAmount = rangeWidth * THRESHOLDS.CONFLICT_WIDENING_RATIO;
-    newLow -= wideningAmount;
-    newHigh += wideningAmount;
+    
+    if (signal.direction === "down") {
+      // Shift low bound down, widen high bound up
+      newLow = currentBelief.belief_low - shift - wideningAmount;
+      newHigh = currentBelief.belief_high + wideningAmount;
+    } else if (signal.direction === "up") {
+      // Shift high bound up, widen low bound down
+      newLow = currentBelief.belief_low - wideningAmount;
+      newHigh = currentBelief.belief_high + shift + wideningAmount;
+    } else {
+      // Neutral: just widen both
+      newLow = currentBelief.belief_low - wideningAmount;
+      newHigh = currentBelief.belief_high + wideningAmount;
+    }
+  } else {
+    // Normal shift (non-conflicting)
+    newLow = currentBelief.belief_low + (shift * directionMultiplier);
+    newHigh = currentBelief.belief_high + (shift * directionMultiplier);
   }
   
   // Clamp to [0, 100]
@@ -89,6 +105,9 @@ export function updateBelief(
  * 
  * Confidence reflects the stability and quality of our belief,
  * not optimism about the outcome.
+ * 
+ * NOTE: This function builds confidence from scratch each time.
+ * Use calculateConfidenceFromCurrent() to apply decay to existing confidence.
  */
 export function calculateConfidence(
   belief: BeliefState,
@@ -116,6 +135,35 @@ export function calculateConfidence(
   // Section 5.3: Time decay
   const timeDecay = daysSinceLastSignal * THRESHOLDS.TIME_DECAY_RATE;
   confidence -= timeDecay;
+  
+  // Section 5.4: Bounds
+  confidence = clamp(
+    confidence, 
+    THRESHOLDS.MIN_CONFIDENCE_BOUND, 
+    THRESHOLDS.MAX_CONFIDENCE_BOUND
+  );
+  
+  return confidence;
+}
+
+/**
+ * Calculate confidence decay from current confidence level
+ * Used when no new signals arrive but time passes
+ */
+export function calculateConfidenceFromCurrent(
+  currentConfidence: number,
+  unknownCount: number,
+  daysSinceLastSignal: number
+): number {
+  let confidence = currentConfidence;
+  
+  // Section 5.3: Time decay
+  const timeDecay = daysSinceLastSignal * THRESHOLDS.TIME_DECAY_RATE;
+  confidence -= timeDecay;
+  
+  // Unknown penalty
+  const unknownPenalty = unknownCount * THRESHOLDS.UNKNOWN_PENALTY;
+  confidence -= unknownPenalty;
   
   // Section 5.4: Bounds
   confidence = clamp(
