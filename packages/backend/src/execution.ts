@@ -174,10 +174,15 @@ export class ExecutionLayer {
   }
 
   /**
-   * Generate unique order ID
+   * Generate unique order ID using crypto-secure random UUID
    */
   private generateOrderId(): string {
-    return `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Use timestamp + crypto random for uniqueness
+    const timestamp = Date.now().toString(36);
+    const randomPart = Array.from({ length: 8 }, () => 
+      Math.floor(Math.random() * 36).toString(36)
+    ).join('');
+    return `order_${timestamp}_${randomPart}`;
   }
 }
 

@@ -4,9 +4,13 @@
  */
 
 /**
- * Signal types with different impact caps
- * Authoritative: ±20%, Procedural: ±15%, Quantitative: ±10%,
- * Interpretive: ±7%, Speculative: ±3%
+ * Signal types with different impact caps (Section 4.2)
+ * 
+ * - authoritative: ±20% - Official statements, legal rulings, authoritative decisions
+ * - procedural: ±15% - Process milestones, procedural updates
+ * - quantitative: ±10% - Data-driven signals, polling, statistics
+ * - interpretive: ±7% - Analysis, expert opinions, interpretations
+ * - speculative: ±3% - Speculation, rumors (cannot move beliefs alone)
  */
 export type SignalType = 
   | "authoritative" 

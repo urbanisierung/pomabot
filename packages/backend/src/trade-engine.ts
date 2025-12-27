@@ -166,7 +166,7 @@ export function checkEdge(
     return {
       eligible: false,
       failedCheck: "edge",
-      reason: `Edge ${(edge * 100).toFixed(1)}% below minimum ${(minEdge * 100).toFixed(1)}%`,
+      reason: `Edge ${edge.toFixed(3)} below minimum ${minEdge.toFixed(3)}`,
     };
   }
   return { eligible: true };

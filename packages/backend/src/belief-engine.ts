@@ -185,7 +185,10 @@ export function performBeliefUpdate(
 ): BeliefState {
   // Check eligibility
   if (!isSignalEligible(signal, signalHistory)) {
-    throw new Error("Signal not eligible: speculative-only updates rejected");
+    throw new Error(
+      "Signal rejected: speculative signals cannot update beliefs without " +
+      "supporting authoritative, procedural, or quantitative signals"
+    );
   }
   
   // Update belief range
