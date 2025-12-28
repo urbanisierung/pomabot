@@ -1,6 +1,6 @@
 # Polymarket AI Trading System
 
-An autonomous trading system for Polymarket that uses deterministic belief-based decision making.
+An autonomous trading system for Polymarket that uses deterministic belief-based decision making with real-time market and news integration.
 
 ## Overview
 
@@ -9,10 +9,17 @@ This system implements a conservative, truth-first approach to prediction market
 - **Truthful probability statements** matter more than profits
 - **Inaction is success** - most of the time, doing nothing is the correct choice
 - **Survival beats cleverness** - conservative beliefs ensure long-term viability
+- **Real-time integration** - Connects to Polymarket API and news sources
 
 ## Architecture
 
 ```
+┌──────────────┐     ┌──────────────┐     ┌────────────────┐
+│  Polymarket  │────▶│    News      │────▶│     Signal     │
+│     API      │     │  Aggregator  │     │  Generation    │
+└──────────────┘     └──────────────┘     └────────┬───────┘
+                                                    │
+                                                    ▼
 ┌─────────────┐     ┌──────────────┐     ┌────────────────┐
 │   Data      │────▶│   Belief     │────▶│   Trade        │
 │  Ingestion  │     │   Engine     │     │   Engine       │
@@ -33,13 +40,79 @@ This system implements a conservative, truth-first approach to prediction market
 
 ## Project Structure
 
-- `/packages/shared` - Core domain models and types
-- `/packages/backend` - Belief engine, trade engine, state machine, calibration
-- `/packages/frontend` - Observability dashboard (Astro + React + TailwindCSS)
+```
+pomabot/
+├── apps/
+│   ├── api/              # Trading service with integrations
+│   │   ├── connectors/   # Polymarket & news APIs
+│   │   └── services/     # Trading orchestration
+│   └── web/              # Observability dashboard
+├── packages/
+│   ├── core/             # Belief engine, trade engine, state machine
+│   └── shared/           # Common types and utilities
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 22+ (or 20+ with warnings)
+- pnpm 9+
+
+### Installation
+
+```bash
+# Install pnpm if needed
+npm install -g pnpm
+
+# Install dependencies
+pnpm install
+
+# Build all packages
+pnpm build
+
+# Run tests
+pnpm test
+```
+
+### Running the Trading Bot
+
+```bash
+# Set your Polymarket API key (optional for read-only mode)
+export POLYMARKET_API_KEY=your_key_here
+
+# Start the trading service
+pnpm --filter @pomabot/api dev
+```
+
+### Running the Dashboard
+
+```bash
+# Start the web dashboard
+pnpm dev
+```
+
+Open `http://localhost:3000` to view real-time system state.
 
 ## Core Components
 
-### Belief Engine
+### Polymarket Integration (`apps/api/connectors/polymarket.ts`)
+
+Real-time integration with Polymarket's CLOB API:
+- Fetches active markets and price data
+- Places limit orders
+- Monitors order book depth
+- Tracks market liquidity
+
+### News Aggregation (`apps/api/connectors/news.ts`)
+
+Automated signal generation from multiple sources:
+- **SEC announcements** - Official regulatory decisions (authoritative signals)
+- **Financial news** - Reuters, Bloomberg feeds (interpretive signals)  
+- **Polling data** - FiveThirtyEight, RealClearPolitics (quantitative signals)
+- **Court rulings** - Federal court decisions (authoritative signals)
+
+### Belief Engine (`packages/core/src/belief-engine.ts`)
 
 Deterministically updates belief ranges based on signals:
 
@@ -48,7 +121,7 @@ Deterministically updates belief ranges based on signals:
 - **Conflict handling**: Conflicting signals widen belief ranges
 - **Confidence calculation**: Factors in signal quality, unknowns, time decay
 
-### Trade Decision Engine
+### Trade Decision Engine (`packages/core/src/trade-engine.ts`)
 
 Evaluates trade eligibility through ordered checks:
 
@@ -63,7 +136,7 @@ Evaluates trade eligibility through ordered checks:
 
 **Fail any check → No trade**
 
-### State Machine
+### State Machine (`packages/core/src/state-machine.ts`)
 
 Controls system flow:
 
@@ -71,7 +144,7 @@ Controls system flow:
 - Enforces valid transitions only
 - Immediate HALT on invariant breach
 
-### Calibration System
+### Calibration System (`packages/core/src/calibration.ts`)
 
 Tracks performance metrics:
 
@@ -99,32 +172,60 @@ These rules are **non-negotiable** and enforced at all times:
 ## Installation
 
 ```bash
+# Install pnpm
+npm install -g pnpm
+
 # Install dependencies
-npm install
+pnpm install
 
 # Build all packages
-npm run build
+pnpm build
 
 # Run tests
-npm run test
+pnpm test
 ```
 
 ## Development
 
-### Backend
+### API Service (Trading Bot)
 
 ```bash
-cd packages/backend
-npm run build
-npm test
+# Development mode with hot reload
+pnpm --filter @pomabot/api dev
+
+# Production build
+pnpm --filter @pomabot/api build
+pnpm --filter @pomabot/api start
 ```
 
-### Frontend
+### Web Dashboard
 
 ```bash
-cd packages/frontend
-npm run dev    # Start dev server at http://localhost:3000
-npm run build  # Build for production
+# Development server
+pnpm dev  # or: pnpm --filter @pomabot/web dev
+
+# Production build
+pnpm --filter @pomabot/web build
+```
+
+### Core Package (Belief/Trade Engines)
+
+```bash
+cd packages/core
+pnpm build
+pnpm test
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Required for live trading (optional for monitoring)
+POLYMARKET_API_KEY=your_api_key_here
+
+# Optional: Polling interval in milliseconds
+POLL_INTERVAL=60000
 ```
 
 ## Testing

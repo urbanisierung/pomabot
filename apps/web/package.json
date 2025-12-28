@@ -1,5 +1,5 @@
 {
-  "name": "@pomabot/frontend",
+  "name": "@pomabot/web",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@pomabot/shared": "0.1.0",
+    "@pomabot/shared": "workspace:*",
     "astro": "5.16.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"

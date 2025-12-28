@@ -4,22 +4,21 @@
   "private": true,
   "description": "Autonomous Polymarket trading system with deterministic belief-based decision making",
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "check": "npm run check --workspaces --if-present",
-    "format": "npm run format --workspaces --if-present",
-    "verify": "npm run lint && npm run check && npm run test && npm run build"
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "check": "pnpm -r run check",
+    "format": "pnpm -r run format",
+    "verify": "pnpm run lint && pnpm run check && pnpm run test && pnpm run build",
+    "dev": "pnpm --filter @pomabot/web run dev"
   },
   "devDependencies": {
     "@types/node": "22.10.5",
     "typescript": "5.9.3"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
   }
 }

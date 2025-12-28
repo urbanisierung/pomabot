@@ -1,5 +1,5 @@
 {
-  "name": "@pomabot/backend",
+  "name": "@pomabot/core",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@pomabot/shared": "0.1.0"
+    "@pomabot/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.10.5",
