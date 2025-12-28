@@ -1,0 +1,22 @@
+{
+  "name": "@pomabot/web",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@pomabot/shared": "workspace:*",
+    "astro": "5.16.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@astrojs/react": "4.2.1",
+    "@types/react": "19.0.10",
+    "@types/react-dom": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}
