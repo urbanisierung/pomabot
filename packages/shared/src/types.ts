@@ -71,11 +71,26 @@ export interface TradeDecision {
   timestamp: Date;
 }
 
+/**
+ * Market categories supported by the system
+ * Each category has different edge thresholds based on predictability
+ */
+export type MarketCategory = 
+  | "politics"        // Elections, government policy
+  | "crypto"          // Cryptocurrency, DeFi, blockchain
+  | "sports"          // Tournaments, games, player outcomes
+  | "economics"       // Interest rates, inflation, economic indicators
+  | "entertainment"   // Award shows, celebrity events
+  | "weather"         // Temperature, natural events
+  | "technology"      // Product launches, tech regulation
+  | "world"           // Geopolitics, international events
+  | "other";          // Miscellaneous markets
+
 export interface Market {
   id: string;
   question: string;
   resolution_criteria: string;
-  category: "politics" | "crypto";
+  category: MarketCategory;
   current_price: number;
   liquidity: number;
   volume_24h: number;

@@ -160,31 +160,64 @@ export class PolymarketConnector {
 
   /**
    * Categorize market based on question content
+   * Uses keyword matching to classify markets into appropriate categories
    */
-  private categorizeMarket(question: string): "politics" | "crypto" {
+  private categorizeMarket(question: string): Market["category"] {
     const lowerQuestion = question.toLowerCase();
     
-    const politicsKeywords = [
-      "election", "president", "senate", "congress", "vote",
-      "trump", "biden", "democrat", "republican", "governor"
-    ];
+    // Define keywords for each category (ordered by specificity)
+    const categoryKeywords = {
+      crypto: [
+        "bitcoin", "btc", "ethereum", "eth", "crypto", "cryptocurrency",
+        "blockchain", "defi", "nft", "token", "coin", "wallet",
+        "satoshi", "mining", "web3", "dao"
+      ],
+      sports: [
+        "nfl", "nba", "mlb", "nhl", "uefa", "fifa", "olympics",
+        "super bowl", "world cup", "championship", "playoff", "team",
+        "win", "lose", "score", "game", "match", "tournament",
+        "player", "coach", "mvp", "draft"
+      ],
+      weather: [
+        "temperature", "weather", "hurricane", "storm", "rain",
+        "snow", "celsius", "fahrenheit", "climate", "tornado",
+        "flood", "drought", "heat wave", "cold snap"
+      ],
+      entertainment: [
+        "oscar", "grammy", "emmy", "golden globe", "cannes",
+        "movie", "film", "album", "song", "celebrity", "actor",
+        "actress", "tv show", "series", "season finale", "award"
+      ],
+      economics: [
+        "gdp", "inflation", "interest rate", "federal reserve", "fed",
+        "unemployment", "jobs report", "cpi", "dow", "s&p 500",
+        "nasdaq", "stock market", "recession", "economic growth"
+      ],
+      technology: [
+        "apple", "google", "microsoft", "amazon", "meta", "tesla",
+        "iphone", "android", "ai", "artificial intelligence",
+        "product launch", "tech", "software", "hardware", "app"
+      ],
+      world: [
+        "war", "peace", "treaty", "nato", "un", "united nations",
+        "international", "country", "nuclear", "sanction",
+        "diplomat", "summit", "g7", "g20", "conflict"
+      ],
+      politics: [
+        "election", "president", "senate", "congress", "vote",
+        "democrat", "republican", "governor", "mayor", "bill",
+        "legislation", "policy", "government", "impeachment"
+      ],
+    };
     
-    const cryptoKeywords = [
-      "bitcoin", "btc", "ethereum", "eth", "crypto", "sec",
-      "etf", "blockchain", "defi", "nft"
-    ];
-    
-    // Check for crypto keywords first (more specific)
-    if (cryptoKeywords.some(keyword => lowerQuestion.includes(keyword))) {
-      return "crypto";
+    // Check each category in order of specificity
+    for (const [category, keywords] of Object.entries(categoryKeywords)) {
+      if (keywords.some(keyword => lowerQuestion.includes(keyword))) {
+        return category as Market["category"];
+      }
     }
     
-    // Default to politics
-    if (politicsKeywords.some(keyword => lowerQuestion.includes(keyword))) {
-      return "politics";
-    }
-    
-    // Default fallback
-    return "politics";
+    // Default to "other" if no match
+    return "other";
   }
 }

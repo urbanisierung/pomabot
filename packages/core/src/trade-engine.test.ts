@@ -59,6 +59,52 @@ describe("Trade Eligibility Checks", () => {
     
     expect(result.eligible).toBe(true);
   });
+
+  test("should accept sports trade when edge is above 10%", () => {
+    const edge = 0.11; // 11%
+    const result = checkEdge(edge, "sports");
+    
+    expect(result.eligible).toBe(true);
+  });
+
+  test("should reject sports trade when edge is below 10%", () => {
+    const edge = 0.09; // 9%
+    const result = checkEdge(edge, "sports");
+    
+    expect(result.eligible).toBe(false);
+    expect(result.failedCheck).toBe("edge");
+  });
+
+  test("should accept weather trade when edge is above 8%", () => {
+    const edge = 0.09; // 9%
+    const result = checkEdge(edge, "weather");
+    
+    expect(result.eligible).toBe(true);
+  });
+
+  test("should reject entertainment trade when edge is below 18%", () => {
+    const edge = 0.15; // 15%
+    const result = checkEdge(edge, "entertainment");
+    
+    expect(result.eligible).toBe(false);
+    expect(result.failedCheck).toBe("edge");
+  });
+
+  test("should reject world trade when edge is below 20%", () => {
+    const edge = 0.18; // 18%
+    const result = checkEdge(edge, "world");
+    
+    expect(result.eligible).toBe(false);
+    expect(result.failedCheck).toBe("edge");
+  });
+
+  test("should use highest threshold (25%) for unknown category", () => {
+    const edge = 0.22; // 22%
+    const result = checkEdge(edge, "unknown-category");
+    
+    expect(result.eligible).toBe(false);
+    expect(result.failedCheck).toBe("edge");
+  });
 });
 
 describe("Edge Calculation", () => {

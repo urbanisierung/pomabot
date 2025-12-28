@@ -106,11 +106,36 @@ Real-time integration with Polymarket's CLOB API:
 
 ### News Aggregation (`apps/api/connectors/news.ts`)
 
-Automated signal generation from multiple sources:
+Automated signal generation from multiple sources across **9 market categories**:
+
+**Politics & Crypto:**
 - **SEC announcements** - Official regulatory decisions (authoritative signals)
 - **Financial news** - Reuters, Bloomberg feeds (interpretive signals)  
 - **Polling data** - FiveThirtyEight, RealClearPolitics (quantitative signals)
 - **Court rulings** - Federal court decisions (authoritative signals)
+
+**Sports:**
+- **ESPN, USA Today Sports** - Game results, statistics (quantitative signals)
+- **Official league APIs** - NBA, NFL, MLB, NHL data (authoritative signals)
+
+**Economics:**
+- **BEA, Federal Reserve** - Economic indicators, interest rates (authoritative signals)
+- **BLS** - Employment and labor data (quantitative signals)
+
+**Entertainment:**
+- **Variety, Hollywood Reporter** - Awards coverage (interpretive signals)
+- **Official announcements** - Nominees and winners (authoritative signals)
+
+**Weather:**
+- **National Weather Service, NOAA** - Weather forecasts (quantitative signals)
+
+**Technology:**
+- **TechCrunch, The Verge** - Product launches, tech news (interpretive signals)
+
+**World Events:**
+- **Reuters, UN** - Geopolitical news (interpretive signals)
+
+See `MARKET_CATEGORIES.md` for detailed information on all supported categories and edge thresholds.
 
 ### Belief Engine (`packages/core/src/belief-engine.ts`)
 
@@ -215,6 +240,24 @@ cd packages/core
 pnpm build
 pnpm test
 ```
+
+## Market Categories
+
+The system now supports **9 market categories** with category-specific edge thresholds:
+
+| Category | Edge Threshold | Characteristics |
+|----------|----------------|-----------------|
+| Weather | 8% | Highly predictable, scientific models |
+| Sports | 10% | Rich statistics, clear outcomes |
+| Politics | 12% | Polls, official data |
+| Economics | 12% | Official indicators, some volatility |
+| Crypto | 15% | High volatility, speculation |
+| Technology | 15% | Surprise announcements |
+| Entertainment | 18% | High subjectivity |
+| World | 20% | Geopolitical uncertainty |
+| Other | 25% | Unclassified, most conservative |
+
+For complete details on news sources and implementation, see `MARKET_CATEGORIES.md`.
 
 ## Configuration
 
