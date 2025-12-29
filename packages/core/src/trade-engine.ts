@@ -158,15 +158,17 @@ export function calculateEdge(
  */
 export function checkEdge(
   edge: number,
-  category: "politics" | "crypto"
+  category: string
 ): TradeEligibilityResult {
-  const minEdge = MIN_EDGE[category];
+  // Get minimum edge for category, default to 'other' (highest threshold)
+  // If category not found, use 0.25 (25%) as the most conservative threshold
+  const minEdge: number = MIN_EDGE[category] ?? 0.25;
   
   if (edge < minEdge) {
     return {
       eligible: false,
       failedCheck: "edge",
-      reason: `Edge ${edge.toFixed(3)} below minimum ${minEdge.toFixed(3)}`,
+      reason: `Edge ${edge.toFixed(3)} below minimum ${minEdge.toFixed(3)} for category ${category}`,
     };
   }
   return { eligible: true };

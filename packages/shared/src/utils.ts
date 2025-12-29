@@ -15,10 +15,22 @@ export const IMPACT_CAPS: Record<string, number> = {
 
 /**
  * Minimum edge thresholds by category (Section 8)
+ * 
+ * Thresholds are set based on:
+ * - Predictability: More predictable markets have lower thresholds
+ * - Volatility: More volatile markets require higher edges
+ * - Information quality: Markets with better data sources can use lower thresholds
  */
-export const MIN_EDGE = {
-  politics: 0.12,  // 12%
-  crypto: 0.15,    // 15%
+export const MIN_EDGE: Record<string, number> = {
+  politics: 0.12,       // 12% - Polls, official statements (medium predictability)
+  crypto: 0.15,         // 15% - High volatility, speculation-driven
+  sports: 0.10,         // 10% - Rich statistics, historical data, lower volatility
+  economics: 0.12,      // 12% - Official data, but subject to revisions
+  entertainment: 0.18,  // 18% - High subjectivity, industry politics
+  weather: 0.08,        // 8% - Scientific models, meteorological data
+  technology: 0.15,     // 15% - Company secrecy, surprise announcements
+  world: 0.20,          // 20% - Geopolitical uncertainty, many unknowns
+  other: 0.25,          // 25% - Miscellaneous/unclassified, highest bar
 };
 
 /**
