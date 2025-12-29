@@ -10,11 +10,14 @@ import type { SystemState, StateTransition } from "@pomabot/shared";
 /**
  * Valid state transitions (Section 3)
  * Any transition not listed here is ILLEGAL
+ * 
+ * Note: Added INGEST_SIGNAL → OBSERVE for rejected signals (simulation mode)
+ *       Added UPDATE_BELIEF → OBSERVE for recovery between markets
  */
 const VALID_TRANSITIONS: Record<SystemState, SystemState[]> = {
   OBSERVE: ["INGEST_SIGNAL", "HALT"],
-  INGEST_SIGNAL: ["UPDATE_BELIEF", "HALT"],
-  UPDATE_BELIEF: ["EVALUATE_TRADE", "HALT"],
+  INGEST_SIGNAL: ["UPDATE_BELIEF", "OBSERVE", "HALT"], // OBSERVE added for rejected signals
+  UPDATE_BELIEF: ["EVALUATE_TRADE", "OBSERVE", "HALT"], // OBSERVE added for multi-signal handling
   EVALUATE_TRADE: ["EXECUTE_TRADE", "OBSERVE", "HALT"],
   EXECUTE_TRADE: ["MONITOR", "HALT"],
   MONITOR: ["OBSERVE", "HALT"],

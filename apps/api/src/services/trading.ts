@@ -36,7 +36,7 @@ export class TradingService {
   // private execution: ExecutionLayer;
   
   private marketStates: Map<string, MarketState> = new Map();
-  private pollInterval = 60000; // 1 minute
+  private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
 
   constructor(apiKey?: string) {
     this.polymarket = new PolymarketConnector(apiKey);
@@ -52,9 +52,15 @@ export class TradingService {
    */
   async start(): Promise<void> {
     console.log("🚀 Starting Polymarket trading service...");
+    console.log(`   Poll interval: ${this.pollInterval / 1000}s`);
+    console.log(`   Mode: ${process.env.POLYMARKET_API_KEY ? "LIVE" : "SIMULATION (read-only)"}`);
+    console.log(`   Verbose: ${process.env.VERBOSE === "true" ? "ON" : "OFF"}`);
     
     // Initial market load
     await this.loadMarkets();
+    
+    // Run first monitoring cycle immediately
+    await this.monitorLoop();
     
     // Start monitoring loop
     setInterval(() => this.monitorLoop(), this.pollInterval);
@@ -73,7 +79,12 @@ export class TradingService {
         return;
       }
 
-      this.stateMachine.transition("OBSERVE", "Monitoring cycle started");
+      // Only transition to OBSERVE if we're in MONITOR state (valid path)
+      // Skip initial transition if already in OBSERVE
+      const currentState = this.stateMachine.getCurrentState();
+      if (currentState === "MONITOR") {
+        this.stateMachine.transition("OBSERVE", "Monitoring cycle started");
+      }
 
       // Fetch latest news and signals
       const news = await this.news.fetchNews();
@@ -119,8 +130,15 @@ export class TradingService {
 
   /**
    * Update market data from Polymarket
+   * In simulation mode, skip individual fetches (too slow for 1000+ markets)
    */
   private async updateMarkets(): Promise<void> {
+    // Skip individual market updates in simulation - use batch data from fetchMarkets
+    // This is much faster and sufficient for testing
+    if (!process.env.POLYMARKET_API_KEY) {
+      return;
+    }
+    
     for (const [marketId, state] of this.marketStates) {
       const updatedMarket = await this.polymarket.getMarket(marketId);
       
@@ -146,9 +164,28 @@ export class TradingService {
       // Generate signals from news
       const signals = await this.news.generateSignals(news, keywords);
 
+      // Skip state machine transitions for markets without signals (optimization)
+      if (signals.length === 0) {
+        return;
+      }
+
       // Process each new signal
       for (const signal of signals) {
-        this.stateMachine.transition("INGEST_SIGNAL", `Processing ${signal.type} signal`);
+        if (this.stateMachine.isHalted()) return;
+        
+        // Ensure we're in OBSERVE state before starting a new signal cycle
+        const currentState = this.stateMachine.getCurrentState();
+        if (currentState === "UPDATE_BELIEF" || currentState === "EVALUATE_TRADE") {
+          // Complete current cycle by going back to OBSERVE
+          this.stateMachine.transition("OBSERVE", "Resetting for next signal");
+        }
+        
+        // Now start fresh cycle: OBSERVE → INGEST_SIGNAL
+        if (this.stateMachine.getCurrentState() === "OBSERVE") {
+          this.stateMachine.transition("INGEST_SIGNAL", `Processing ${signal.type} signal`);
+        }
+        
+        if (this.stateMachine.isHalted()) return;
 
         // Update belief
         try {
@@ -169,7 +206,14 @@ export class TradingService {
           });
 
         } catch (error) {
-          console.warn(`Signal rejected for ${marketId}:`, error);
+          // Signal rejected - this is expected behavior, reduce logging noise
+          if (process.env.VERBOSE === "true") {
+            console.warn(`Signal rejected for ${marketId}:`, error);
+          }
+          // Go back to OBSERVE for next signal
+          if (this.stateMachine.getCurrentState() === "INGEST_SIGNAL") {
+            this.stateMachine.transition("OBSERVE", "Signal rejected, continuing");
+          }
           continue;
         }
       }
@@ -186,7 +230,11 @@ export class TradingService {
    * Evaluate and potentially execute a trade
    */
   private async evaluateTradeForMarket(state: MarketState): Promise<void> {
-    this.stateMachine.transition("EVALUATE_TRADE", "Checking trade eligibility");
+    // Only transition if we're in UPDATE_BELIEF state
+    const currentState = this.stateMachine.getCurrentState();
+    if (currentState === "UPDATE_BELIEF") {
+      this.stateMachine.transition("EVALUATE_TRADE", "Checking trade eligibility");
+    }
 
     const criteria = {
       authority: "Polymarket resolution",
@@ -203,20 +251,24 @@ export class TradingService {
       console.log(`   Edge: ${this.calculateEdge(decision, state.belief)}%`);
       console.log(`   Rationale: ${decision.rationale}`);
 
-      // In production mode, execute the trade
-      // For now, just log it
-      this.stateMachine.transition("EXECUTE_TRADE", "Trade approved");
-      
-      // const result = await this.execution.executeTrade(decision, state.market.id);
-      // if (result.success) {
-      //   console.log("✓ Order placed:", result.order?.id);
-      // }
+      // In simulation mode, just log it
+      if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
+        this.stateMachine.transition("EXECUTE_TRADE", "[SIMULATION] Trade would be executed");
+        // Transition through MONITOR back to OBSERVE for proper state flow
+        this.stateMachine.transition("MONITOR", "Simulated trade complete");
+        this.stateMachine.transition("OBSERVE", "Ready for next cycle");
+      }
 
     } else if ("eligible" in decision && !decision.eligible) {
-      console.log(`⏸️ No trade for ${state.market.question}: ${decision.reason}`);
+      // Verbose logging in simulation mode
+      if (process.env.VERBOSE === "true") {
+        console.log(`⏸️ No trade for ${state.market.question}: ${decision.reason}`);
+      }
+      // Go back to OBSERVE from EVALUATE_TRADE (valid transition)
+      if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
+        this.stateMachine.transition("OBSERVE", "No trade - continuing observation");
+      }
     }
-
-    this.stateMachine.transition("OBSERVE", "Trade evaluation complete");
   }
 
   /**
