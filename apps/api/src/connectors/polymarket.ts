@@ -17,7 +17,11 @@ export interface PolymarketMarketResponse {
   outcomes: string[];
   volume: string;
   liquidity: string;
-  last_price: string;
+  tokens?: Array<{ outcome: string; price: number; winner?: boolean }>;
+}
+
+export interface PolymarketApiResponse {
+  data: PolymarketMarketResponse[];
 }
 
 export interface OrderRequest {
@@ -48,7 +52,8 @@ export class PolymarketConnector {
         throw new Error(`Polymarket API error: ${response.statusText}`);
       }
 
-      const data = await response.json() as PolymarketMarketResponse[];
+      const result = await response.json() as PolymarketApiResponse;
+      const data = result.data ?? [];
       
       return data.map(market => this.transformMarket(market));
     } catch (error) {
@@ -69,6 +74,12 @@ export class PolymarketConnector {
       }
 
       const data = await response.json() as PolymarketMarketResponse;
+      
+      // Validate required fields exist
+      if (!data.question || !data.condition_id) {
+        return undefined;
+      }
+      
       return this.transformMarket(data);
     } catch (error) {
       console.error(`Failed to fetch market ${marketId}:`, error);
@@ -145,14 +156,17 @@ export class PolymarketConnector {
   private transformMarket(data: PolymarketMarketResponse): Market {
     const category = this.categorizeMarket(data.question);
     
+    // Get price from tokens array (first token's price, convert to percentage)
+    const price = data.tokens?.[0]?.price ?? 0.5;
+    
     return {
       id: data.condition_id,
       question: data.question,
       resolution_criteria: data.description,
       category,
-      current_price: parseFloat(data.last_price) * 100, // Convert to percentage
-      liquidity: parseFloat(data.liquidity),
-      volume_24h: parseFloat(data.volume),
+      current_price: price * 100, // Convert to percentage
+      liquidity: parseFloat(data.liquidity ?? "0"),
+      volume_24h: parseFloat(data.volume ?? "0"),
       created_at: new Date(),
       closes_at: new Date(data.end_date_iso),
     };

@@ -151,12 +151,32 @@ export class NewsAggregator {
    * Fetch SEC announcements
    */
   private async fetchSECNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, parse RSS feed
     console.log("Fetching SEC news...");
     
-    // Example: Would use RSS parser or web scraper
-    // const response = await fetch(this.RSS_FEEDS.sec);
-    // const rss = await parseRSS(response);
+    // In production, would parse RSS feed from sec.gov
+    // For simulation, return sample news items to trigger belief updates
+    if (process.env.SIMULATION_DATA === "true") {
+      return [
+        {
+          source: "sec.gov",
+          title: "SEC Approves New Bitcoin ETF Applications",
+          content: "The Securities and Exchange Commission has approved multiple spot Bitcoin ETF applications, marking a historic moment for cryptocurrency regulation.",
+          url: "https://sec.gov/news/press-release/2024-btc-etf",
+          published_at: new Date(),
+          relevance_score: 0.95,
+          category: "crypto",
+        },
+        {
+          source: "sec.gov",
+          title: "SEC Issues Guidance on Election Market Regulations",
+          content: "New regulatory guidance clarifies rules for prediction markets during election season.",
+          url: "https://sec.gov/news/press-release/2024-election",
+          published_at: new Date(),
+          relevance_score: 0.8,
+          category: "politics",
+        },
+      ];
+    }
     
     return [];
   }
@@ -174,9 +194,32 @@ export class NewsAggregator {
    * Fetch sports news from ESPN, USA Today, etc.
    */
   private async fetchSportsNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, parse RSS feeds
     console.log("Fetching sports news...");
-    // Would fetch from ESPN, USA Today Sports, league APIs
+    
+    // For simulation, return sample sports news
+    if (process.env.SIMULATION_DATA === "true") {
+      return [
+        {
+          source: "espn.com",
+          title: "NBA Finals: Lakers Lead Series 3-1",
+          content: "The Los Angeles Lakers have taken a commanding 3-1 series lead in the NBA Finals after a dominant performance.",
+          url: "https://espn.com/nba/story/finals-2024",
+          published_at: new Date(),
+          relevance_score: 0.9,
+          category: "sports",
+        },
+        {
+          source: "official",
+          title: "NFL Playoff Bracket Announced",
+          content: "The official NFL playoff bracket has been released, with teams confirmed for the postseason.",
+          url: "https://nfl.com/playoffs/2024",
+          published_at: new Date(),
+          relevance_score: 0.85,
+          category: "sports",
+        },
+      ];
+    }
+    
     return [];
   }
 
