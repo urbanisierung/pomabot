@@ -1,5 +1,158 @@
 # Copilot Changes
 
+## 2025-12-30: Implemented Phase 5 - Reddit Data Integration
+
+### Summary
+Implemented complete Reddit data integration to enhance market prediction accuracy through sentiment analysis and social media signals. The system monitors relevant subreddits, analyzes post sentiment, and integrates findings into the belief engine with credibility-based weighting.
+
+### Files Created
+
+**[apps/api/src/connectors/reddit.ts](apps/api/src/connectors/reddit.ts)** (510 lines)
+- `RedditConnector` class for Reddit API integration
+- OAuth2 authentication flow with access token management
+- Rate limiting (60 requests/minute) to respect API limits
+- Methods to fetch hot posts, new posts, and search posts
+- Keyword-based market search across relevant subreddits
+- Sentiment analysis using keyword matching and weighting
+- Volume and momentum tracking for post activity
+- Credibility scoring by subreddit (0.5-0.9 based on reliability)
+- Conversion to belief engine Signal types (quantitative/interpretive/speculative)
+- Time-weighted scoring based on post recency and score
+
+**[packages/core/src/reddit.test.ts](packages/core/src/reddit.test.ts)** (260 lines)
+- Comprehensive test suite with 14 tests
+- Tests for signal generation from Reddit posts
+- Sentiment analysis testing (positive/negative/neutral)
+- Score and recency weighting verification
+- Signal type conversion testing (quantitative/interpretive/speculative)
+- Credibility scoring tests for different subreddit types
+- All tests passing ✅
+
+**[PHASE5_REDDIT_SETUP.md](PHASE5_REDDIT_SETUP.md)** (8148 characters)
+- Complete setup guide for Reddit integration
+- Step-by-step Reddit app creation instructions
+- Environment variable configuration
+- Monitored subreddits by market category
+- Credibility scoring explanation
+- Troubleshooting guide
+- API reference documentation
+
+### Files Modified
+
+**[apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)**
+- Added `reddit?: RedditConnector` field to TradingService
+- Added `redditEnabled: boolean` flag for feature toggle
+- Integrated Reddit initialization in constructor with credential checking
+- Added Reddit authentication in `start()` method
+- Enhanced `processMarket()` to fetch and integrate Reddit signals
+- Reddit signals combined with news signals for belief updates
+- Verbose logging for Reddit signal details
+
+**[ROADMAP.md](ROADMAP.md)**
+- Updated Phase 5 status from "📋 Planned" to "✅ Complete"
+- Marked all Phase 5 milestones as complete
+- Added implementation details section
+- Documented environment variables
+- Added usage instructions
+- Updated timeline summary table
+
+### Key Features
+
+**Reddit API Integration:**
+- OAuth2 authentication with Reddit API
+- Rate limiting to respect 60 requests/minute limit
+- Support for client credentials and password grant types
+- Automatic token refresh when expired
+
+**Sentiment Analysis:**
+- Keyword extraction from post titles and content
+- Positive/negative word matching for sentiment scoring
+- Score-weighted sentiment calculation (higher scored posts = more weight)
+- Recency weighting using exponential decay (recent posts = more weight)
+- Sentiment range: -1 (negative) to +1 (positive)
+
+**Subreddit Credibility:**
+- High credibility (0.85-0.9): r/news, r/worldnews, r/PoliticalDiscussion, r/nba, r/nfl
+- Medium credibility (0.7-0.8): r/politics, r/CryptoCurrency, r/investing, r/stocks
+- Low credibility (0.5-0.6): r/wallstreetbets, r/Conservative, r/Bitcoin
+- Default credibility: 0.7 for unknown subreddits
+
+**Signal Conversion:**
+- Quantitative: High credibility (≥0.85) + high volume (≥20 posts)
+- Interpretive: Medium credibility (≥0.75) + medium volume (≥10 posts)
+- Speculative: Lower credibility or volume
+- Strength (1-5) based on sentiment magnitude and volume
+
+**Monitored Subreddits:**
+- Politics: r/politics, r/PoliticalDiscussion, r/Conservative, r/neoliberal
+- Crypto: r/CryptoCurrency, r/Bitcoin, r/ethereum, r/CryptoMarkets
+- Sports: r/sportsbook, r/nba, r/nfl, r/soccer
+- Economics: r/wallstreetbets, r/investing, r/stocks, r/economy
+- Entertainment: r/movies, r/television, r/entertainment, r/Oscars
+- Weather: r/weather, r/TropicalWeather
+- Technology: r/technology, r/programming, r/technews
+- World: r/news, r/worldnews, r/geopolitics
+
+### Environment Variables
+
+```bash
+# Reddit Integration (optional)
+REDDIT_CLIENT_ID=<client-id>
+REDDIT_CLIENT_SECRET=<client-secret>
+REDDIT_USER_AGENT="pomabot/1.0"
+REDDIT_USERNAME=<username>      # Optional: for user-authenticated access
+REDDIT_PASSWORD=<password>      # Optional: for user-authenticated access
+```
+
+**Note:** If Reddit credentials are not provided, the system runs without Reddit integration (graceful degradation).
+
+### Testing & Verification
+
+All verification checks passed:
+- ✅ TypeScript compilation (tsc --noEmit)
+- ✅ Build successful (all packages)
+- ✅ All tests passing (57 total, including 14 new Reddit tests)
+- ✅ Type checking passed
+
+### Architecture
+
+**Signal Flow:**
+1. TradingService extracts market keywords
+2. RedditConnector searches relevant subreddits
+3. Posts analyzed for sentiment and volume
+4. RedditSignal generated with sentiment score
+5. Converted to belief engine Signal (quantitative/interpretive/speculative)
+6. Combined with news signals
+7. Belief engine updates market beliefs
+
+**Rate Limiting:**
+- Minimum 1 second between requests
+- Respects Reddit's 60 requests/minute limit
+- Automatic request spacing
+
+**Error Handling:**
+- Graceful failure if Reddit authentication fails
+- Warning logs for Reddit API errors
+- System continues with news signals if Reddit unavailable
+- No impact on core trading functionality
+
+### Future Enhancements
+
+Potential improvements documented in PHASE5_REDDIT_SETUP.md:
+- Comment analysis for deeper sentiment
+- User reputation weighting (karma/age)
+- Trend detection for rapid sentiment changes
+- Subreddit discovery
+- Cross-posting detection
+
+### References
+
+- Reddit API Documentation: https://www.reddit.com/dev/api/
+- Reddit App Creation: https://www.reddit.com/prefs/apps
+- Rate Limits: 60 requests/minute for authenticated clients
+
+---
+
 ## 2025-12-30: Implemented Phase 4 - Real Trading Execution
 
 ### Summary
