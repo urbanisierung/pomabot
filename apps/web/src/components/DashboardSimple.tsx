@@ -1,39 +1,37 @@
 /**
- * Dashboard Component - Simple version without Tailwind
+ * Dashboard Component - Connected to live API data
  */
 
-import { useState } from 'react';
-import type { BeliefState, SystemState } from '@pomabot/shared';
+import { useState, useEffect } from 'react';
+import type { SystemState } from '@pomabot/shared';
 
-// Mock data
-const mockBeliefs: Array<{ marketId: string; question: string; belief: BeliefState; currentPrice: number }> = [
-  {
-    marketId: 'market1',
-    question: 'Will Bitcoin ETF be approved by SEC in 2024?',
-    belief: {
-      belief_low: 65,
-      belief_high: 80,
-      confidence: 75,
-      unknowns: [
-        { id: '1', description: 'SEC commissioner voting patterns', added_at: new Date() }
-      ],
-      last_updated: new Date(),
-    },
-    currentPrice: 52,
-  },
-  {
-    marketId: 'market2',
-    question: 'Will Trump win 2024 election?',
-    belief: {
-      belief_low: 45,
-      belief_high: 60,
-      confidence: 68,
-      unknowns: [],
-      last_updated: new Date(),
-    },
-    currentPrice: 72,
-  },
-];
+// API response types
+interface MarketData {
+  marketId: string;
+  question: string;
+  category: string;
+  currentPrice: number;
+  liquidity: number;
+  closesAt: string;
+  belief: {
+    belief_low: number;
+    belief_high: number;
+    confidence: number;
+    unknowns: Array<{ id: string; description: string; added_at: string }>;
+    last_updated: string;
+  };
+  signalCount: number;
+  lastChecked: string;
+}
+
+interface StatusData {
+  state: string;
+  markets: number;
+  halted: boolean;
+  haltReason?: string;
+}
+
+const API_BASE = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:4000';
 
 const styles = {
   container: {
@@ -208,8 +206,175 @@ const styles = {
   },
 };
 
+// Market Card Component
+function MarketCard({ market }: { market: MarketData }) {
+  const edge = market.currentPrice < market.belief.belief_low
+    ? market.belief.belief_low - market.currentPrice
+    : market.currentPrice > market.belief.belief_high
+    ? market.currentPrice - market.belief.belief_high
+    : 0;
+
+  return (
+    <div style={styles.marketCard}>
+      <h3 style={styles.marketTitle}>{market.question}</h3>
+      <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>
+        {market.category.toUpperCase()} • Closes: {new Date(market.closesAt).toLocaleDateString()}
+      </div>
+
+      {/* Belief Range Visualization */}
+      <div style={styles.rangeContainer}>
+        <div style={styles.rangeLabel}>
+          <span>Belief Range</span>
+          <span>
+            {market.belief.belief_low.toFixed(0)}% - {market.belief.belief_high.toFixed(0)}%
+          </span>
+        </div>
+        <div style={styles.rangeBar}>
+          <div
+            style={{
+              ...styles.beliefRange,
+              left: `${market.belief.belief_low}%`,
+              width: `${market.belief.belief_high - market.belief.belief_low}%`,
+            }}
+          />
+          <div
+            style={{
+              ...styles.marketPrice,
+              left: `${Math.min(100, Math.max(0, market.currentPrice))}%`,
+            }}
+            title={`Market Price: ${market.currentPrice.toFixed(1)}%`}
+          />
+        </div>
+        <div style={styles.rangeFooter}>
+          <span>0%</span>
+          <span style={{ color: '#ef4444' }}>Market: {market.currentPrice.toFixed(1)}%</span>
+          <span>100%</span>
+        </div>
+      </div>
+
+      {/* Metrics */}
+      <div style={styles.metricsGrid}>
+        <div style={styles.metricBox}>
+          <div style={styles.metricLabel}>Confidence</div>
+          <div style={styles.metricValue}>{market.belief.confidence.toFixed(0)}</div>
+        </div>
+        <div style={styles.metricBox}>
+          <div style={styles.metricLabel}>Edge</div>
+          <div style={{ ...styles.metricValue, color: edge > 0 ? '#16a34a' : '#6b7280' }}>
+            {edge > 0 ? `+${edge.toFixed(1)}%` : '0%'}
+          </div>
+        </div>
+        <div style={styles.metricBox}>
+          <div style={styles.metricLabel}>Liquidity</div>
+          <div style={styles.metricValue}>${(market.liquidity / 1000).toFixed(0)}k</div>
+        </div>
+        <div style={styles.metricBox}>
+          <div style={styles.metricLabel}>Signals</div>
+          <div style={styles.metricValue}>{market.signalCount}</div>
+        </div>
+      </div>
+
+      {/* Trade Recommendation */}
+      <div
+        style={{
+          ...styles.tradeRecommendation,
+          ...(edge > 0 ? styles.tradeRecommendationBuy : styles.tradeRecommendationNone),
+        }}
+      >
+        <div style={styles.tradeTitle}>
+          {market.currentPrice < market.belief.belief_low
+            ? '💡 Potential BUY YES'
+            : market.currentPrice > market.belief.belief_high
+            ? '💡 Potential BUY NO'
+            : '⏸️ No Trade'}
+        </div>
+        <div style={styles.tradeSubtitle}>
+          {market.currentPrice < market.belief.belief_low
+            ? 'Market underpriced relative to belief'
+            : market.currentPrice > market.belief.belief_high
+            ? 'Market overpriced relative to belief'
+            : 'Market price within belief range'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const [systemState] = useState<SystemState>('OBSERVE');
+  const [systemState, setSystemState] = useState<SystemState>('OBSERVE');
+  const [markets, setMarkets] = useState<MarketData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [totalMarkets, setTotalMarkets] = useState(0);
+  const [halted, setHalted] = useState(false);
+  const [haltReason, setHaltReason] = useState<string | undefined>(undefined);
+
+  // Fetch data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch status
+        const statusRes = await fetch(`${API_BASE}/api/status`);
+        if (statusRes.ok) {
+          const status: StatusData = await statusRes.json();
+          setSystemState(status.state as SystemState);
+          setTotalMarkets(status.markets);
+          setHalted(status.halted);
+          setHaltReason(status.haltReason);
+        }
+
+        // Fetch markets
+        const marketsRes = await fetch(`${API_BASE}/api/markets`);
+        if (marketsRes.ok) {
+          const data = await marketsRes.json();
+          setMarkets(data.markets);
+        }
+        
+        setLoading(false);
+        setError(undefined);
+      } catch (err) {
+        setError('Failed to connect to API. Make sure the trading bot is running on port 4000.');
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filter markets with trade opportunities (price outside belief range)
+  const tradeOpportunities = markets.filter(
+    m => m.currentPrice < m.belief.belief_low || m.currentPrice > m.belief.belief_high
+  );
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.container, padding: '2rem', textAlign: 'center' as const }}>
+        <div style={{ fontSize: '1.5rem' }}>Loading...</div>
+        <div style={{ color: '#6b7280', marginTop: '0.5rem' }}>Connecting to trading bot API...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ ...styles.container, padding: '2rem' }}>
+        <div style={{ ...styles.card, background: '#fef2f2', borderColor: '#fecaca' }}>
+          <h2 style={{ ...styles.heading, color: '#dc2626' }}>⚠️ Connection Error</h2>
+          <p style={{ color: '#7f1d1d' }}>{error}</p>
+          <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#6b7280' }}>
+            <p>Start the trading bot with:</p>
+            <code style={{ background: '#f3f4f6', padding: '0.5rem', display: 'block', marginTop: '0.5rem' }}>
+              POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
+            </code>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -223,115 +388,51 @@ export default function Dashboard() {
           </div>
           <div style={styles.statBox}>
             <div style={styles.statLabel}>Active Markets</div>
-            <div style={styles.statValue}>{mockBeliefs.length}</div>
+            <div style={styles.statValue}>{totalMarkets}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.statLabel}>Trade Opportunities</div>
+            <div style={styles.statValue}>{tradeOpportunities.length}</div>
           </div>
           <div style={styles.statBox}>
             <div style={styles.statLabel}>Total Unknowns</div>
             <div style={styles.statValue}>
-              {mockBeliefs.reduce((acc, m) => acc + m.belief.unknowns.length, 0)}
+              {markets.reduce((acc, m) => acc + m.belief.unknowns.length, 0)}
             </div>
           </div>
         </div>
+        {halted && (
+          <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fef2f2', borderRadius: '0.5rem', color: '#dc2626' }}>
+            ⚠️ System HALTED: {haltReason}
+          </div>
+        )}
       </div>
 
-      {/* Markets Grid */}
-      <div style={styles.grid}>
-        {mockBeliefs.map((market) => (
-          <div key={market.marketId} style={styles.marketCard}>
-            <h3 style={styles.marketTitle}>{market.question}</h3>
-
-            {/* Belief Range Visualization */}
-            <div style={styles.rangeContainer}>
-              <div style={styles.rangeLabel}>
-                <span>Belief Range</span>
-                <span>
-                  {market.belief.belief_low.toFixed(0)}% - {market.belief.belief_high.toFixed(0)}%
-                </span>
-              </div>
-              <div style={styles.rangeBar}>
-                <div
-                  style={{
-                    ...styles.beliefRange,
-                    left: `${market.belief.belief_low}%`,
-                    width: `${market.belief.belief_high - market.belief.belief_low}%`,
-                  }}
-                />
-                <div
-                  style={{
-                    ...styles.marketPrice,
-                    left: `${market.currentPrice}%`,
-                  }}
-                  title={`Market Price: ${market.currentPrice}%`}
-                />
-              </div>
-              <div style={styles.rangeFooter}>
-                <span>0%</span>
-                <span style={{ color: '#ef4444' }}>Market: {market.currentPrice}%</span>
-                <span>100%</span>
-              </div>
-            </div>
-
-            {/* Metrics */}
-            <div style={styles.metricsGrid}>
-              <div style={styles.metricBox}>
-                <div style={styles.metricLabel}>Confidence</div>
-                <div style={styles.metricValue}>{market.belief.confidence.toFixed(0)}</div>
-              </div>
-              <div style={styles.metricBox}>
-                <div style={styles.metricLabel}>Edge</div>
-                <div style={styles.metricValue}>
-                  {market.currentPrice < market.belief.belief_low
-                    ? `+${(market.belief.belief_low - market.currentPrice).toFixed(1)}%`
-                    : market.currentPrice > market.belief.belief_high
-                    ? `+${(market.currentPrice - market.belief.belief_high).toFixed(1)}%`
-                    : '0%'}
-                </div>
-              </div>
-            </div>
-
-            {/* Unknowns */}
-            {market.belief.unknowns.length > 0 && (
-              <div style={styles.unknownsSection}>
-                <div style={styles.unknownsTitle}>
-                  Unknowns ({market.belief.unknowns.length})
-                </div>
-                <ul style={styles.unknownsList}>
-                  {market.belief.unknowns.map((unknown) => (
-                    <li key={unknown.id} style={styles.unknownItem}>
-                      • {unknown.description}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Trade Recommendation */}
-            <div
-              style={{
-                ...styles.tradeRecommendation,
-                ...(market.currentPrice < market.belief.belief_low ||
-                market.currentPrice > market.belief.belief_high
-                  ? styles.tradeRecommendationBuy
-                  : styles.tradeRecommendationNone),
-              }}
-            >
-              <div style={styles.tradeTitle}>
-                {market.currentPrice < market.belief.belief_low
-                  ? '💡 Potential BUY YES'
-                  : market.currentPrice > market.belief.belief_high
-                  ? '💡 Potential BUY NO'
-                  : '⏸️ No Trade'}
-              </div>
-              <div style={styles.tradeSubtitle}>
-                {market.currentPrice < market.belief.belief_low
-                  ? 'Market underpriced relative to belief'
-                  : market.currentPrice > market.belief.belief_high
-                  ? 'Market overpriced relative to belief'
-                  : 'Market price within belief range'}
-              </div>
-            </div>
+      {/* Trade Opportunities Section */}
+      {tradeOpportunities.length > 0 && (
+        <div style={styles.card}>
+          <h2 style={{ ...styles.heading, color: '#16a34a' }}>💡 Trade Opportunities ({tradeOpportunities.length})</h2>
+          <div style={styles.grid}>
+            {tradeOpportunities.slice(0, 10).map((market) => (
+              <MarketCard key={market.marketId} market={market} />
+            ))}
           </div>
-        ))}
+        </div>
+      )}
+
+      {/* All Markets Grid */}
+      <div style={styles.card}>
+        <h2 style={styles.heading}>All Markets ({markets.length})</h2>
+        <div style={styles.grid}>
+          {markets.slice(0, 20).map((market) => (
+            <MarketCard key={market.marketId} market={market} />
+          ))}
+        </div>
+        {markets.length > 20 && (
+          <div style={{ marginTop: '1rem', textAlign: 'center' as const, color: '#6b7280' }}>
+            Showing 20 of {markets.length} markets
+          </div>
+        )}
       </div>
 
       {/* Philosophy */}

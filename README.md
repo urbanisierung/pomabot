@@ -94,6 +94,32 @@ pnpm dev
 
 Open `http://localhost:3000` to view real-time system state.
 
+### Running in Simulation Mode
+
+Simulation mode allows you to test the system without an API key and with mock data:
+
+```bash
+# Basic simulation (real market monitoring, no mock data)
+POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
+
+# Full simulation with mock news data (recommended for testing)
+SIMULATION_DATA=true POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
+
+# Verbose mode (detailed logging)
+SIMULATION_DATA=true VERBOSE=true POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POLL_INTERVAL` | 60000 | Polling interval in milliseconds |
+| `SIMULATION_DATA` | false | Enable mock news data for testing |
+| `VERBOSE` | false | Enable detailed logging |
+
+**Notes:**
+- No API key required for simulation (read-only market monitoring)
+- `SIMULATION_DATA=true` generates mock SEC and sports news for testing
+- Simulation runs continuously with belief updates
+
 ## Core Components
 
 ### Polymarket Integration (`apps/api/connectors/polymarket.ts`)
