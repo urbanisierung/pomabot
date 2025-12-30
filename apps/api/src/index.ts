@@ -25,7 +25,7 @@ async function main() {
   }
 
   // Initialize trading service
-  const tradingService = new TradingService(apiKey);
+  const tradingService = new TradingService();
 
   // Start the service
   await tradingService.start();

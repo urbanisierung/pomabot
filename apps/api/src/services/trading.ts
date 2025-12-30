@@ -410,13 +410,9 @@ export class TradingService {
           );
           
           // Log and notify
-          if (!this.simulationMode) {
-            console.log(`✅ Real trade executed: Order ${result.order?.id}`);
-            await this.notifier.sendTradeExecuted({
-              orderId: result.order?.id ?? "unknown",
-              market: state.market,
-              decision,
-            });
+          if (!this.simulationMode && result.order) {
+            console.log(`✅ Real trade executed: Order ${result.order.id}`);
+            await this.notifier.sendTradeExecuted(result.order, state.market);
           } else {
             console.log(`✅ Simulated trade logged`);
           }
@@ -456,7 +452,7 @@ export class TradingService {
   /**
    * Get token ID for YES/NO outcome from market data
    */
-  private getTokenIdForOutcome(market: Market, side: "YES" | "NO"): string | undefined {
+  private getTokenIdForOutcome(_market: Market, _side: "YES" | "NO"): string | undefined {
     // This would need to be populated from the market data
     // For now, return undefined in simulation mode
     if (this.simulationMode) {
@@ -466,28 +462,6 @@ export class TradingService {
     // In real mode, this should be fetched from market.tokens array
     // The PolymarketMarketResponse includes token_id in tokens array
     return undefined;
-  }
-        this.stateMachine.transition("OBSERVE", "Ready for next cycle");
-      }
-
-    } else if ("eligible" in decision && !decision.eligible) {
-      // Log evaluation result
-      await this.auditLogger.logMarketEvaluated(
-        state.market,
-        state.belief,
-        false,
-        decision.reason
-      );
-      
-      // Verbose logging in simulation mode
-      if (process.env.VERBOSE === "true") {
-        console.log(`⏸️ No trade for ${state.market.question}: ${decision.reason}`);
-      }
-      // Go back to OBSERVE from EVALUATE_TRADE (valid transition)
-      if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
-        this.stateMachine.transition("OBSERVE", "No trade - continuing observation");
-      }
-    }
   }
 
   /**

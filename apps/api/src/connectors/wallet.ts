@@ -7,7 +7,7 @@
  * - Order signing
  */
 
-import { Wallet, type Provider } from "ethers";
+import { Wallet } from "ethers";
 
 export interface WalletConfig {
   privateKey: string;
