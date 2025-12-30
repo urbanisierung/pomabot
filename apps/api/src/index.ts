@@ -102,14 +102,34 @@ async function main() {
   }, 5 * 60 * 1000);
 
   // Handle graceful shutdown
-  process.on("SIGINT", () => {
+  process.on("SIGINT", async () => {
     console.log("\n\n🛑 Shutting down gracefully...");
+    
+    // Log system stop
+    try {
+      const { AuditLogger } = await import("@pomabot/core");
+      const logger = AuditLogger.getInstance();
+      await logger.logSystemStop("SIGINT received");
+    } catch {
+      // Ignore errors during shutdown
+    }
+    
     server.close();
     process.exit(0);
   });
 
-  process.on("SIGTERM", () => {
+  process.on("SIGTERM", async () => {
     console.log("\n\n🛑 Shutting down gracefully...");
+    
+    // Log system stop
+    try {
+      const { AuditLogger } = await import("@pomabot/core");
+      const logger = AuditLogger.getInstance();
+      await logger.logSystemStop("SIGTERM received");
+    } catch {
+      // Ignore errors during shutdown
+    }
+    
     server.close();
     process.exit(0);
   });
