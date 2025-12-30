@@ -107,7 +107,234 @@ SIMULATION_DATA=true POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
 
 ---
 
-## Phase 3: Real Trading Execution 💰
+## Phase 3: Fly.io Deployment & Audit Logging 🚀
+
+**Status:** 📋 Planned  
+**Duration:** 1-2 weeks
+**Priority:** HIGH - Required for production deployment
+
+### Goals
+- Deploy entire application to Fly.io on a single small machine
+- Minimize resource usage for cost-effective hosting (~$2-5/month)
+- Implement persistent audit logging with Git-based storage
+- Integrate with external logging service for observability
+
+### Fly.io Research Summary
+
+**Machine Sizing:**
+| Preset | vCPU | RAM | Monthly Cost |
+|--------|------|-----|--------------|
+| shared-cpu-1x | 1 shared | 256MB | ~$1.94 |
+| shared-cpu-1x | 1 shared | 512MB | ~$3.19 |
+| shared-cpu-1x | 1 shared | 1GB | ~$5.70 |
+
+**Recommendation:** Use `shared-cpu-1x` with 256-512MB RAM for PomaBot (bot + dashboard)
+
+### Milestones
+
+#### 3.1 Fly.io Setup
+- [ ] Install Fly CLI: `curl -L https://fly.io/install.sh | sh`
+- [ ] Create Fly account and authenticate: `fly auth login`
+- [ ] Create app: `fly launch` (generates fly.toml)
+- [ ] Configure single machine deployment
+
+#### 3.2 Dockerfile Configuration
+Create optimized multi-stage Dockerfile for minimal image size:
+
+```dockerfile
+# Dockerfile
+FROM node:24-alpine AS builder
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
+RUN pnpm build
+
+FROM node:24-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+# Copy only production dependencies and built files
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/core/dist ./packages/core/dist
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/web/dist ./apps/web/dist
+EXPOSE 4000
+CMD ["node", "apps/api/dist/index.js"]
+```
+
+#### 3.3 fly.toml Configuration
+```toml
+# fly.toml
+app = "pomabot"
+primary_region = "fra"  # Frankfurt (or choose closest region)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  API_PORT = "4000"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"      # Stop when idle (saves costs)
+  auto_start_machines = true       # Auto-start on request
+  min_machines_running = 0         # Allow scaling to zero
+  
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 100
+    hard_limit = 200
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"                 # Minimal memory for cost savings
+```
+
+#### 3.4 Resource Optimization Tips
+- **Auto-stop/start**: Machines stop when idle, restart on HTTP request
+- **Single process**: Combine API + frontend in one process
+- **No volumes needed**: Use Git for persistent audit logs
+- **Minimal memory**: Node.js + small dashboard runs in 256MB
+- **Kill signal**: Use SIGTERM for graceful shutdown
+
+#### 3.5 Audit Logging System
+Implement persistent CSV audit logs committed to GitHub:
+
+```typescript
+// packages/core/src/audit-log.ts
+interface AuditEntry {
+  timestamp: string;          // ISO 8601
+  event: AuditEventType;
+  marketId?: string;
+  marketQuestion?: string;
+  action?: string;
+  details?: string;
+  belief?: number;
+  edge?: number;
+  amount?: number;
+  pnl?: number;
+}
+
+type AuditEventType = 
+  | 'SYSTEM_START'
+  | 'SYSTEM_STOP'
+  | 'MARKET_EVALUATED'
+  | 'TRADE_OPPORTUNITY'
+  | 'TRADE_EXECUTED'
+  | 'POSITION_CLOSED'
+  | 'ERROR'
+  | 'DAILY_SUMMARY';
+
+// CSV format: timestamp,event,marketId,marketQuestion,action,details,belief,edge,amount,pnl
+```
+
+**Git-based Persistence Strategy:**
+```bash
+# Scheduled job (e.g., daily via cron or on shutdown)
+git add audit-logs/
+git commit -m "chore: update audit logs $(date +%Y-%m-%d)"
+git push origin main
+```
+
+#### 3.6 External Logging Services Research
+
+**Free/Cheap Options:**
+
+| Service | Free Tier | Pricing | Features |
+|---------|-----------|---------|----------|
+| **Logtail/Better Stack** | 1GB/month | $0/mo (free tier) | Structured logs, alerts, dashboards |
+| **Papertrail** | 48hr search, 100MB/mo | Free tier | Real-time tail, search |
+| **Logflare** | 5M events/mo | $0/mo (free tier) | Cloudflare Workers friendly |
+| **Axiom** | 500GB ingest/mo | $0/mo (free tier) | S3-backed, SQL queries |
+| **Fly.io Native** | Built-in | Included | `fly logs` command |
+
+**Recommendation:** Use **Logtail/Better Stack** (free tier: 1GB/month)
+- Easy integration: HTTP endpoint for log shipping
+- Structured JSON logs
+- Free alerting and dashboards
+
+```typescript
+// packages/core/src/logtail.ts
+const LOGTAIL_SOURCE_TOKEN = process.env.LOGTAIL_TOKEN;
+
+async function shipLog(entry: AuditEntry): Promise<void> {
+  if (!LOGTAIL_SOURCE_TOKEN) return; // Skip if not configured
+  
+  await fetch('https://in.logtail.com', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${LOGTAIL_SOURCE_TOKEN}`
+    },
+    body: JSON.stringify(entry)
+  });
+}
+```
+
+### Deployment Guide
+
+#### Prerequisites
+1. Create Fly.io account: https://fly.io/app/sign-up
+2. Install Fly CLI
+3. Create Slack webhook (Phase 2)
+4. (Optional) Create Logtail account for external logging
+
+#### Step-by-Step Deployment
+
+```bash
+# 1. Install Fly CLI
+curl -L https://fly.io/install.sh | sh
+
+# 2. Authenticate
+fly auth login
+
+# 3. Launch app (creates fly.toml)
+fly launch --name pomabot --region fra --no-deploy
+
+# 4. Set secrets
+fly secrets set SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+fly secrets set LOGTAIL_TOKEN="..."  # Optional
+
+# 5. Deploy
+fly deploy
+
+# 6. View logs
+fly logs
+
+# 7. Check status
+fly status
+
+# 8. SSH into machine (debugging)
+fly ssh console
+```
+
+#### Estimated Monthly Cost
+| Resource | Cost |
+|----------|------|
+| Machine (shared-cpu-1x, 256MB) | ~$1.94 |
+| Stopped machine (rootfs) | ~$0.15/GB |
+| SSL Certificate | Free (first 10) |
+| Bandwidth (100GB) | Free |
+| **Total** | **~$2-5/month** |
+
+### Action Items
+- [ ] Create Fly.io account
+- [ ] Install Fly CLI locally
+- [ ] Create Dockerfile with multi-stage build
+- [ ] Create fly.toml configuration
+- [ ] Implement audit-log.ts for CSV logging
+- [ ] Set up Git-based log persistence
+- [ ] (Optional) Set up Logtail account
+- [ ] Deploy and test
+- [ ] Document deployment process
+
+---
+
+## Phase 4: Real Trading Execution 💰
 
 **Status:** 📋 Planned  
 **Duration:** 2-3 weeks
@@ -120,12 +347,12 @@ SIMULATION_DATA=true POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
 
 ### Milestones
 
-#### 3.1 Wallet Integration
+#### 4.1 Wallet Integration
 - [ ] Add private key configuration (secure env vars)
 - [ ] Implement wallet signing with `ethers.js` or `viem`
 - [ ] Polygon network (chain_id: 137) support
 
-#### 3.2 Polymarket CLOB Authentication
+#### 4.2 Polymarket CLOB Authentication
 Based on py-clob-client reference:
 
 ```typescript
@@ -143,7 +370,7 @@ interface ClobClientConfig {
 // - GET /auth/api-key with L1 signature
 ```
 
-#### 3.3 Token Allowances
+#### 4.3 Token Allowances
 Required contract approvals for EOA wallets:
 
 | Token | Contract Address | Purpose |
@@ -153,7 +380,7 @@ Required contract approvals for EOA wallets:
 | Exchange | `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E` | CLOB exchange |
 | Neg Risk Exchange | `0xC5d563A36AE78145C45a50134d48A1215220f80a` | Neg risk adapter |
 
-#### 3.4 Order Execution
+#### 4.4 Order Execution
 - [ ] Implement `createOrder()` with proper signing
 - [ ] POST to `/order` endpoint with signed order
 - [ ] Order types: GTC (Good Till Cancel), GTD (Good Till Date)
@@ -173,7 +400,7 @@ interface OrderArgs {
 // 3. Submit: client.postOrder(signedOrder, OrderType.GTC)
 ```
 
-#### 3.5 Safety Controls
+#### 4.5 Safety Controls
 - [ ] Maximum position size limits
 - [ ] Daily loss limits
 - [ ] Order confirmation delays
@@ -189,7 +416,7 @@ interface OrderArgs {
 
 ---
 
-## Phase 4: Reddit Data Integration 📊
+## Phase 5: Reddit Data Integration 📊
 
 **Status:** 📋 Planned  
 **Duration:** 2-3 weeks
@@ -202,7 +429,7 @@ interface OrderArgs {
 
 ### Milestones
 
-#### 4.1 Reddit API Integration
+#### 5.1 Reddit API Integration
 ```typescript
 // packages/core/src/connectors/reddit.ts
 interface RedditConfig {
@@ -220,7 +447,7 @@ interface RedditConfig {
 // - GET /r/{subreddit}/comments/{article} - Post comments
 ```
 
-#### 4.2 Relevant Subreddits to Monitor
+#### 5.2 Relevant Subreddits to Monitor
 | Market Category | Subreddits |
 |-----------------|------------|
 | Politics | r/politics, r/PoliticalDiscussion, r/Conservative, r/neoliberal |
@@ -229,7 +456,7 @@ interface RedditConfig {
 | Sports | r/sportsbook, r/nba, r/nfl |
 | General | r/news, r/worldnews |
 
-#### 4.3 Sentiment Analysis
+#### 5.3 Sentiment Analysis
 - [ ] Keyword extraction from titles and content
 - [ ] Basic sentiment scoring (positive/negative/neutral)
 - [ ] Volume tracking (post frequency)
@@ -250,7 +477,7 @@ interface RedditSignal {
 }
 ```
 
-#### 4.4 Belief Engine Integration
+#### 5.4 Belief Engine Integration
 - [ ] Weight Reddit signals in belief calculations
 - [ ] Time decay for older signals
 - [ ] Credibility scoring by subreddit
@@ -266,7 +493,7 @@ interface RedditSignal {
 
 ---
 
-## Phase 5: Additional Data Sources 📰
+## Phase 6: Additional Data Sources 📰
 
 **Status:** 📋 Planned  
 **Duration:** 3-4 weeks
@@ -279,22 +506,22 @@ interface RedditSignal {
 
 ### Potential Sources
 
-#### 5.1 News APIs
+#### 6.1 News APIs
 - [ ] NewsAPI.org for headlines
 - [ ] Bing News Search
 - [ ] Google News RSS
 
-#### 5.2 Prediction Markets
+#### 6.2 Prediction Markets
 - [ ] Metaculus (scientific forecasts)
 - [ ] Manifold Markets (user predictions)
 - [ ] Kalshi (regulated markets)
 
-#### 5.3 Social Media
+#### 6.3 Social Media
 - [ ] Twitter/X API (if accessible)
 - [ ] Telegram groups
 - [ ] Discord sentiment
 
-#### 5.4 Official Sources
+#### 6.4 Official Sources
 - [ ] Government data feeds
 - [ ] Sports APIs (for sports markets)
 - [ ] Economic indicators (FRED API)
@@ -308,29 +535,29 @@ interface RedditSignal {
 
 ---
 
-## Phase 6: Advanced Features 🚀
+## Phase 7: Advanced Features 🚀
 
 **Status:** 📋 Future
 **Duration:** Ongoing
 
 ### Potential Enhancements
 
-#### 6.1 Machine Learning
+#### 7.1 Machine Learning
 - [ ] Historical trade analysis
 - [ ] Pattern recognition in price movements
 - [ ] Optimal entry/exit timing
 
-#### 6.2 Portfolio Management
+#### 7.2 Portfolio Management
 - [ ] Risk-adjusted position sizing
 - [ ] Correlation-based diversification
 - [ ] Drawdown protection
 
-#### 6.3 Market Making
+#### 7.3 Market Making
 - [ ] Two-sided quotes
 - [ ] Spread capture strategies
 - [ ] Inventory management
 
-#### 6.4 Web Dashboard Enhancements
+#### 7.4 Web Dashboard Enhancements
 - [ ] Historical performance charts
 - [ ] P&L tracking
 - [ ] Trade journal
@@ -359,6 +586,16 @@ SLACK_CHANNEL=#trading-bot
 
 ### Phase 3 Additions
 ```bash
+# Fly.io (set via fly secrets)
+# All secrets are managed by Fly.io's secrets management
+
+# Audit Logging
+LOGTAIL_TOKEN=<logtail-source-token>   # Optional: for external logging
+AUDIT_LOG_PATH=/app/audit-logs         # Path for CSV audit logs
+```
+
+### Phase 4 Additions
+```bash
 # Wallet (SECURE - use secrets manager)
 WALLET_PRIVATE_KEY=<private-key>
 POLYGON_RPC_URL=https://polygon-rpc.com
@@ -368,7 +605,7 @@ MAX_POSITION_SIZE=100                 # Max USDC per position
 DAILY_LOSS_LIMIT=50                   # Max daily loss
 ```
 
-### Phase 4 Additions
+### Phase 5 Additions
 ```bash
 # Reddit
 REDDIT_CLIENT_ID=<client-id>
@@ -399,11 +636,12 @@ Before enabling live trading:
 | Phase | Feature | Duration | Status |
 |-------|---------|----------|--------|
 | 1 | Simulation & Validation | 1-2 weeks | ✅ Complete |
-| 2 | Slack Notifications | 1 week | 🔄 Next |
-| 3 | Real Trading Execution | 2-3 weeks | 📋 Planned |
-| 4 | Reddit Data Integration | 2-3 weeks | 📋 Planned |
-| 5 | Additional Data Sources | 3-4 weeks | 📋 Future |
-| 6 | Advanced Features | Ongoing | 📋 Future |
+| 2 | Slack Notifications | 1 week | ✅ Complete |
+| 3 | Fly.io Deployment & Audit Logging | 1-2 weeks | 🔄 Next |
+| 4 | Real Trading Execution | 2-3 weeks | 📋 Planned |
+| 5 | Reddit Data Integration | 2-3 weeks | 📋 Planned |
+| 6 | Additional Data Sources | 3-4 weeks | 📋 Future |
+| 7 | Advanced Features | Ongoing | 📋 Future |
 
 ---
 
@@ -418,4 +656,4 @@ When working on any phase:
 
 ---
 
-*Last updated: June 2025*
+*Last updated: December 2025*

@@ -1,5 +1,55 @@
 # Copilot Changes
 
+## 2025-12-30: Added Phase 3 - Fly.io Deployment & Audit Logging
+
+### Summary
+Added new high-priority Phase 3 to ROADMAP.md for Fly.io deployment with minimal resources and persistent audit logging. Shifted all subsequent phases accordingly (Phase 3 → 4, Phase 4 → 5, etc.).
+
+### Changes to ROADMAP.md
+
+**New Phase 3: Fly.io Deployment & Audit Logging**
+- Fly.io deployment targeting smallest machine (`shared-cpu-1x` with 256-512MB RAM)
+- Estimated monthly cost: ~$2-5/month
+- Multi-stage Dockerfile for optimized image size
+- `fly.toml` configuration with auto-stop/auto-start for cost savings
+- Audit logging system with CSV file output committed to GitHub
+- External logging service research (Logtail/Better Stack recommended - free tier)
+- Step-by-step deployment guide
+
+**Phase Renumbering:**
+| Old Phase | New Phase | Feature |
+|-----------|-----------|---------|
+| - | 3 | Fly.io Deployment & Audit Logging (NEW) |
+| 3 | 4 | Real Trading Execution |
+| 4 | 5 | Reddit Data Integration |
+| 5 | 6 | Additional Data Sources |
+| 6 | 7 | Advanced Features |
+
+**Key Additions:**
+- Dockerfile example with multi-stage build
+- fly.toml configuration for minimal resources
+- Audit log TypeScript interfaces
+- Logging services comparison table
+- Deployment commands and cost breakdown
+- New environment variables for audit logging
+
+### Fly.io Pricing Research
+| Machine | vCPU | RAM | Monthly Cost |
+|---------|------|-----|--------------|
+| shared-cpu-1x | 1 shared | 256MB | ~$1.94 |
+| shared-cpu-1x | 1 shared | 512MB | ~$3.19 |
+| shared-cpu-1x | 1 shared | 1GB | ~$5.70 |
+
+### Logging Services Compared
+| Service | Free Tier | Recommendation |
+|---------|-----------|----------------|
+| Logtail/Better Stack | 1GB/month | ✅ Recommended |
+| Papertrail | 100MB/mo, 48hr search | Good alternative |
+| Axiom | 500GB/mo | Overkill for this use case |
+| Fly.io Native | Built-in | Limited but free |
+
+---
+
 ## 2025-12-30: Implemented Phase 2 - Slack Notifications
 
 ### Summary
