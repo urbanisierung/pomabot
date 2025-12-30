@@ -15,6 +15,8 @@ import {
   StateMachine,
   // CalibrationSystem,
   // ExecutionLayer,
+  SlackNotifier,
+  type DailySummary,
 } from "@pomabot/core";
 import type { BeliefState, Signal, Market, TradeDecision } from "@pomabot/shared";
 import { PolymarketConnector } from "../connectors/polymarket.js";
@@ -34,9 +36,17 @@ export class TradingService {
   private stateMachine: StateMachine;
   // private calibration: CalibrationSystem;
   // private execution: ExecutionLayer;
+  private notifier: SlackNotifier;
   
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
+  
+  // Daily summary tracking
+  private dailyStats = {
+    tradeOpportunities: 0,
+    tradesExecuted: 0,
+    lastReset: new Date(),
+  };
 
   constructor(apiKey?: string) {
     this.polymarket = new PolymarketConnector(apiKey);
@@ -45,25 +55,35 @@ export class TradingService {
     this.stateMachine = new StateMachine();
     // this.calibration = new CalibrationSystem();
     // this.execution = new ExecutionLayer();
+    this.notifier = new SlackNotifier();
   }
 
   /**
    * Start the trading service
    */
   async start(): Promise<void> {
+    const mode = process.env.POLYMARKET_API_KEY ? "LIVE" : "SIMULATION";
+    
     console.log("🚀 Starting Polymarket trading service...");
     console.log(`   Poll interval: ${this.pollInterval / 1000}s`);
-    console.log(`   Mode: ${process.env.POLYMARKET_API_KEY ? "LIVE" : "SIMULATION (read-only)"}`);
+    console.log(`   Mode: ${mode}`);
     console.log(`   Verbose: ${process.env.VERBOSE === "true" ? "ON" : "OFF"}`);
+    console.log(`   Slack notifications: ${this.notifier.isEnabled() ? "ON" : "OFF"}`);
     
     // Initial market load
     await this.loadMarkets();
+    
+    // Send startup notification
+    await this.notifier.sendSystemStart(this.marketStates.size, mode);
     
     // Run first monitoring cycle immediately
     await this.monitorLoop();
     
     // Start monitoring loop
     setInterval(() => this.monitorLoop(), this.pollInterval);
+    
+    // Schedule daily summary (send at midnight UTC)
+    this.scheduleDailySummary();
     
     console.log("✅ Trading service running");
   }
@@ -246,10 +266,23 @@ export class TradingService {
 
     // Check if trade is recommended
     if ("side" in decision && decision.side !== "NONE") {
+      const edge = this.calculateEdge(decision, state.belief);
+      
       console.log(`💡 Trade opportunity: ${decision.side} on ${state.market.question}`);
       console.log(`   Entry: ${decision.entry_price}%`);
-      console.log(`   Edge: ${this.calculateEdge(decision, state.belief)}%`);
+      console.log(`   Edge: ${edge}%`);
       console.log(`   Rationale: ${decision.rationale}`);
+
+      // Track for daily summary
+      this.dailyStats.tradeOpportunities++;
+      
+      // Send Slack notification
+      await this.notifier.sendTradeOpportunity({
+        market: state.market,
+        decision,
+        belief: state.belief,
+        edge,
+      });
 
       // In simulation mode, just log it
       if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
@@ -331,5 +364,70 @@ export class TradingService {
    */
   getMarketStates(): MarketState[] {
     return Array.from(this.marketStates.values());
+  }
+
+  /**
+   * Schedule daily summary to be sent at midnight UTC
+   */
+  private scheduleDailySummary(): void {
+    // Calculate ms until next midnight UTC
+    const now = new Date();
+    const tomorrow = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 1,
+      0, 0, 0, 0
+    ));
+    const msUntilMidnight = tomorrow.getTime() - now.getTime();
+    
+    // Schedule first summary, then repeat every 24 hours
+    setTimeout(() => {
+      this.sendDailySummaryReport();
+      setInterval(() => this.sendDailySummaryReport(), 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+    
+    console.log(`📅 Daily summary scheduled in ${Math.round(msUntilMidnight / 1000 / 60)} minutes`);
+  }
+
+  /**
+   * Send daily summary report
+   */
+  private async sendDailySummaryReport(): Promise<void> {
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0] ?? now.toISOString();
+    
+    const summary: DailySummary = {
+      date: dateStr,
+      totalPnl: 0, // TODO: Track actual P&L when real trading enabled
+      tradesExecuted: this.dailyStats.tradesExecuted,
+      tradeOpportunities: this.dailyStats.tradeOpportunities,
+      openPositions: [], // TODO: Track positions when real trading enabled
+      marketsMonitored: this.marketStates.size,
+    };
+    
+    await this.notifier.sendDailySummary(summary);
+    
+    // Reset daily stats
+    this.dailyStats = {
+      tradeOpportunities: 0,
+      tradesExecuted: 0,
+      lastReset: now,
+    };
+    
+    console.log(`📊 Daily summary sent for ${dateStr}`);
+  }
+
+  /**
+   * Send halt notification
+   */
+  async notifyHalt(reason: string): Promise<void> {
+    await this.notifier.sendSystemHalt(reason);
+  }
+
+  /**
+   * Send error notification
+   */
+  async notifyError(error: Error, context?: string): Promise<void> {
+    await this.notifier.sendError(error, context);
   }
 }

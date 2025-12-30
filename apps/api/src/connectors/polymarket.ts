@@ -2,12 +2,15 @@
  * Polymarket API Connector
  * 
  * Integrates with Polymarket's CLOB API to:
- * - Fetch market data
+ * - Fetch market data (with pagination)
  * - Monitor price changes
  * - Place and manage orders
  */
 
 import type { Market } from "@pomabot/shared";
+
+// Pagination end marker
+const END_CURSOR = "LTE=";
 
 export interface PolymarketMarketResponse {
   condition_id: string;
@@ -18,10 +21,13 @@ export interface PolymarketMarketResponse {
   volume: string;
   liquidity: string;
   tokens?: Array<{ outcome: string; price: number; winner?: boolean }>;
+  active?: boolean;
+  closed?: boolean;
 }
 
 export interface PolymarketApiResponse {
   data: PolymarketMarketResponse[];
+  next_cursor?: string;
 }
 
 export interface OrderRequest {
@@ -42,20 +48,57 @@ export class PolymarketConnector {
   }
 
   /**
-   * Fetch all active markets from Polymarket
+   * Fetch all active markets from Polymarket with pagination
+   * Filters out closed/expired markets
    */
   async fetchMarkets(): Promise<Market[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/markets?active=true`);
+      const allMarkets: Market[] = [];
+      let nextCursor = "MA=="; // Start cursor
+      let pageCount = 0;
+      const maxPages = 50; // Safety limit to prevent infinite loops
       
-      if (!response.ok) {
-        throw new Error(`Polymarket API error: ${response.statusText}`);
-      }
+      console.log("📡 Fetching markets from Polymarket CLOB API...");
+      
+      while (nextCursor !== END_CURSOR && pageCount < maxPages) {
+        const response = await fetch(
+          `${this.baseUrl}/markets?next_cursor=${nextCursor}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`Polymarket API error: ${response.statusText}`);
+        }
 
-      const result = await response.json() as PolymarketApiResponse;
-      const data = result.data ?? [];
+        const result = await response.json() as PolymarketApiResponse;
+        const data = result.data ?? [];
+        
+        // Filter and transform markets
+        const now = new Date();
+        for (const market of data) {
+          // Skip closed or already resolved markets
+          if (market.closed) continue;
+          
+          // Skip markets that have already ended
+          const endDate = new Date(market.end_date_iso);
+          if (endDate < now) continue;
+          
+          // Skip markets with a winner already (resolved)
+          const hasWinner = market.tokens?.some(t => t.winner === true);
+          if (hasWinner) continue;
+          
+          allMarkets.push(this.transformMarket(market));
+        }
+        
+        nextCursor = result.next_cursor ?? END_CURSOR;
+        pageCount++;
+        
+        if (process.env.VERBOSE === "true") {
+          console.log(`   Page ${pageCount}: ${data.length} markets (${allMarkets.length} active total)`);
+        }
+      }
       
-      return data.map(market => this.transformMarket(market));
+      console.log(`✅ Fetched ${allMarkets.length} active markets from ${pageCount} pages`);
+      return allMarkets;
     } catch (error) {
       console.error("Failed to fetch Polymarket markets:", error);
       return [];
