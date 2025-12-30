@@ -5,9 +5,11 @@
  * - Fetch market data (with pagination)
  * - Monitor price changes
  * - Place and manage orders
+ * - Authenticate with wallet signatures
  */
 
 import type { Market } from "@pomabot/shared";
+import { WalletManager } from "./wallet.js";
 
 // Pagination end marker
 const END_CURSOR = "LTE=";
@@ -20,7 +22,7 @@ export interface PolymarketMarketResponse {
   outcomes: string[];
   volume: string;
   liquidity: string;
-  tokens?: Array<{ outcome: string; price: number; winner?: boolean }>;
+  tokens?: Array<{ outcome: string; price: number; winner?: boolean; token_id?: string }>;
   active?: boolean;
   closed?: boolean;
 }
@@ -31,20 +33,34 @@ export interface PolymarketApiResponse {
 }
 
 export interface OrderRequest {
-  market_id: string;
+  tokenId: string;       // Market token ID (from market.tokens[].token_id)
+  price: number;         // 0.01 to 0.99
+  size: number;          // Amount in USDC terms
   side: "BUY" | "SELL";
-  outcome: "YES" | "NO";
-  size: number;
-  price: number;
-  type: "LIMIT" | "MARKET";
+  feeRateBps?: number;   // Fee rate in basis points (default: 0)
+  nonce?: number;        // Nonce for order uniqueness
+  expiration?: number;   // Unix timestamp for order expiration
+}
+
+export interface ClobAuthCredentials {
+  apiKey: string;
+  apiSecret: string;
+  apiPassphrase: string;
+}
+
+export enum SignatureType {
+  EOA = 0,      // Externally Owned Account
+  POLY_PROXY = 1,
+  POLY_GNOSIS_SAFE = 2,
 }
 
 export class PolymarketConnector {
   private baseUrl = "https://clob.polymarket.com";
-  private apiKey?: string;
+  private wallet?: WalletManager;
+  private authCredentials?: ClobAuthCredentials;
 
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey;
+  constructor(wallet?: WalletManager) {
+    this.wallet = wallet;
   }
 
   /**
@@ -131,40 +147,229 @@ export class PolymarketConnector {
   }
 
   /**
-   * Place a limit order
+   * Authenticate with CLOB API using wallet signature
+   * Derives API credentials from wallet signature
+   */
+  async authenticate(): Promise<boolean> {
+    if (!this.wallet) {
+      console.warn("Wallet required for authentication");
+      return false;
+    }
+
+    try {
+      // Step 1: Get nonce from server
+      const address = this.wallet.getAddress();
+      const nonceResponse = await fetch(`${this.baseUrl}/auth/nonce?address=${address}`);
+      
+      if (!nonceResponse.ok) {
+        throw new Error("Failed to get authentication nonce");
+      }
+
+      const { nonce } = await nonceResponse.json() as { nonce: string };
+
+      // Step 2: Sign the nonce with wallet
+      const message = `This message attests that I control the given wallet\nNonce: ${nonce}`;
+      const signature = await this.wallet.signMessage(message);
+
+      // Step 3: Derive API credentials
+      const credentialsResponse = await fetch(`${this.baseUrl}/auth/api-key`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address,
+          nonce,
+          signature,
+          signatureType: SignatureType.EOA,
+        }),
+      });
+
+      if (!credentialsResponse.ok) {
+        throw new Error("Failed to derive API credentials");
+      }
+
+      this.authCredentials = await credentialsResponse.json() as ClobAuthCredentials;
+      console.log("✅ CLOB API authentication successful");
+      return true;
+
+    } catch (error) {
+      console.error("CLOB authentication failed:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if authenticated
+   */
+  isAuthenticated(): boolean {
+    return this.authCredentials !== undefined;
+  }
+
+  /**
+   * Place a limit order on CLOB
+   * Requires authentication
    */
   async placeOrder(request: OrderRequest): Promise<{ orderId: string } | undefined> {
-    if (!this.apiKey) {
-      console.warn("API key required for trading");
+    if (!this.wallet || !this.authCredentials) {
+      console.warn("Wallet and authentication required for trading");
       return undefined;
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/orders`, {
+      // Build order object
+      const timestamp = Math.floor(Date.now() / 1000);
+      const order = {
+        salt: Math.floor(Math.random() * 1000000000),
+        maker: this.wallet.getAddress(),
+        signer: this.wallet.getAddress(),
+        taker: "0x0000000000000000000000000000000000000000",
+        tokenId: request.tokenId,
+        makerAmount: Math.floor(request.size * 1e6).toString(), // Convert to USDC units (6 decimals)
+        takerAmount: Math.floor((request.size * request.price) * 1e6).toString(),
+        side: request.side,
+        feeRateBps: request.feeRateBps?.toString() ?? "0",
+        nonce: request.nonce ?? timestamp,
+        expiration: request.expiration ?? timestamp + 86400, // Default 24 hours
+        signatureType: SignatureType.EOA,
+      };
+
+      // Sign order with EIP-712
+      const domain = {
+        name: "Polymarket CTF Exchange",
+        version: "1",
+        chainId: this.wallet.getChainId(),
+        verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", // Polymarket exchange contract
+      };
+
+      const types = {
+        Order: [
+          { name: "salt", type: "uint256" },
+          { name: "maker", type: "address" },
+          { name: "signer", type: "address" },
+          { name: "taker", type: "address" },
+          { name: "tokenId", type: "uint256" },
+          { name: "makerAmount", type: "uint256" },
+          { name: "takerAmount", type: "uint256" },
+          { name: "expiration", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "feeRateBps", type: "uint256" },
+          { name: "side", type: "uint8" },
+          { name: "signatureType", type: "uint8" },
+        ],
+      };
+
+      const signature = await this.wallet.signTypedData(domain, types, order);
+
+      // Submit order to CLOB
+      const response = await fetch(`${this.baseUrl}/order`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`,
+          "POLY-API-KEY": this.authCredentials.apiKey,
+          "POLY-SIGNATURE": signature,
+          "POLY-TIMESTAMP": timestamp.toString(),
+          "POLY-PASSPHRASE": this.authCredentials.apiPassphrase,
         },
         body: JSON.stringify({
-          market: request.market_id,
-          side: request.side,
-          outcome: request.outcome,
-          size: request.size.toString(),
-          price: request.price.toString(),
-          type: request.type,
+          order,
+          signature,
+          orderType: "GTC", // Good Till Cancel
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Order placement failed: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Order placement failed: ${response.statusText} - ${errorText}`);
       }
 
-      const result = await response.json() as { orderId: string };
-      return result;
+      const result = await response.json() as { orderId: string; success: boolean };
+      
+      if (result.success) {
+        console.log(`✅ Order placed successfully: ${result.orderId}`);
+        return { orderId: result.orderId };
+      }
+      
+      return undefined;
+
     } catch (error) {
       console.error("Failed to place order:", error);
       return undefined;
+    }
+  }
+
+  /**
+   * Get order status
+   */
+  async getOrderStatus(orderId: string): Promise<{
+    status: "LIVE" | "MATCHED" | "CANCELLED";
+    filledAmount?: number;
+  } | undefined> {
+    if (!this.authCredentials) {
+      console.warn("Authentication required for order status");
+      return undefined;
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/order/${orderId}`, {
+        headers: {
+          "POLY-API-KEY": this.authCredentials.apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        return undefined;
+      }
+
+      const result = await response.json() as {
+        status: "LIVE" | "MATCHED" | "CANCELLED";
+        original_size: string;
+        size_matched: string;
+      };
+
+      return {
+        status: result.status,
+        filledAmount: parseFloat(result.size_matched),
+      };
+    } catch (error) {
+      console.error(`Failed to get order status for ${orderId}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Cancel an order
+   */
+  async cancelOrder(orderId: string): Promise<boolean> {
+    if (!this.wallet || !this.authCredentials) {
+      console.warn("Wallet and authentication required for order cancellation");
+      return false;
+    }
+
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      
+      const response = await fetch(`${this.baseUrl}/order`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "POLY-API-KEY": this.authCredentials.apiKey,
+          "POLY-TIMESTAMP": timestamp.toString(),
+          "POLY-PASSPHRASE": this.authCredentials.apiPassphrase,
+        },
+        body: JSON.stringify({ orderId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Order cancellation failed: ${response.statusText}`);
+      }
+
+      console.log(`✅ Order cancelled: ${orderId}`);
+      return true;
+
+    } catch (error) {
+      console.error("Failed to cancel order:", error);
+      return false;
     }
   }
 

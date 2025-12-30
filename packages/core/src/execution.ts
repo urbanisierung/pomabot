@@ -6,6 +6,8 @@
  * - Limit orders only
  * - No averaging down
  * - Execution cannot override belief logic
+ * 
+ * Phase 4: Real trading execution with Polymarket CLOB integration
  */
 
 import type { TradeDecision, TradeSide } from "@pomabot/shared";
@@ -20,6 +22,7 @@ export interface Order {
   filled_size: number;
   created_at: Date;
   updated_at: Date;
+  clob_order_id?: string;  // Polymarket CLOB order ID
 }
 
 export interface ExecutionResult {
@@ -29,11 +32,38 @@ export interface ExecutionResult {
 }
 
 /**
+ * External connector interface for real order submission
+ * Implemented by PolymarketConnector in live mode
+ */
+export interface OrderConnector {
+  placeOrder(request: {
+    tokenId: string;
+    price: number;
+    size: number;
+    side: "BUY" | "SELL";
+  }): Promise<{ orderId: string } | undefined>;
+  
+  getOrderStatus(orderId: string): Promise<{
+    status: "LIVE" | "MATCHED" | "CANCELLED";
+    filledAmount?: number;
+  } | undefined>;
+  
+  cancelOrder(orderId: string): Promise<boolean>;
+}
+
+/**
  * Execution constraints from Section 10
  */
 export class ExecutionLayer {
   private orders: Map<string, Order> = new Map();
   private activePositions: Map<string, Order> = new Map();
+  private connector?: OrderConnector;
+  private simulationMode: boolean;
+
+  constructor(connector?: OrderConnector, simulationMode = true) {
+    this.connector = connector;
+    this.simulationMode = simulationMode;
+  }
 
   /**
    * Execute a trade decision
@@ -41,7 +71,8 @@ export class ExecutionLayer {
    */
   async executeTrade(
     decision: TradeDecision,
-    marketId: string
+    marketId: string,
+    tokenId?: string
   ): Promise<ExecutionResult> {
     // Validation: No trades without decisions
     if (decision.side === "NONE") {
@@ -74,12 +105,73 @@ export class ExecutionLayer {
 
     this.orders.set(order.id, order);
 
-    // In a real implementation, this would submit to Polymarket API
-    // For now, we'll mark it as pending
+    // If in live mode and connector available, submit to CLOB
+    if (!this.simulationMode && this.connector && tokenId) {
+      try {
+        const result = await this.connector.placeOrder({
+          tokenId,
+          price: decision.entry_price / 100, // Convert percentage to decimal
+          size: decision.size_usd,
+          side: decision.side === "YES" ? "BUY" : "SELL",
+        });
+
+        if (result?.orderId) {
+          order.clob_order_id = result.orderId;
+          console.log(`✅ Real order submitted to CLOB: ${result.orderId}`);
+        } else {
+          order.status = "cancelled";
+          return {
+            success: false,
+            error: "Failed to submit order to CLOB",
+          };
+        }
+      } catch (error) {
+        console.error("Order submission error:", error);
+        order.status = "cancelled";
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+
     return {
       success: true,
       order,
     };
+  }
+
+  /**
+   * Poll order status from CLOB
+   * Should be called periodically to update order states
+   */
+  async syncOrderStatus(orderId: string): Promise<void> {
+    const order = this.orders.get(orderId);
+    if (!order?.clob_order_id || !this.connector) return;
+
+    try {
+      const status = await this.connector.getOrderStatus(order.clob_order_id);
+      
+      if (status) {
+        switch (status.status) {
+          case "LIVE":
+            order.status = "pending";
+            break;
+          case "MATCHED":
+            order.status = "filled";
+            order.filled_size = status.filledAmount ?? order.size_usd;
+            this.activePositions.set(order.market_id, order);
+            break;
+          case "CANCELLED":
+            order.status = "cancelled";
+            this.activePositions.delete(order.market_id);
+            break;
+        }
+        order.updated_at = new Date();
+      }
+    } catch (error) {
+      console.error(`Failed to sync order status for ${orderId}:`, error);
+    }
   }
 
   /**
@@ -135,9 +227,19 @@ export class ExecutionLayer {
   /**
    * Close a position
    */
-  closePosition(marketId: string): boolean {
-    if (!this.activePositions.has(marketId)) {
+  async closePosition(marketId: string): Promise<boolean> {
+    const position = this.activePositions.get(marketId);
+    if (!position) {
       return false;
+    }
+
+    // If in live mode, cancel the order on CLOB
+    if (!this.simulationMode && this.connector && position.clob_order_id) {
+      try {
+        await this.connector.cancelOrder(position.clob_order_id);
+      } catch (error) {
+        console.error(`Failed to cancel order ${position.clob_order_id}:`, error);
+      }
     }
 
     this.activePositions.delete(marketId);
@@ -147,12 +249,23 @@ export class ExecutionLayer {
   /**
    * Cancel an order
    */
-  cancelOrder(orderId: string): boolean {
+  async cancelOrder(orderId: string): Promise<boolean> {
     const order = this.orders.get(orderId);
     if (!order) return false;
 
     if (order.status === "filled") {
       return false; // Cannot cancel filled orders
+    }
+
+    // If in live mode, cancel on CLOB
+    if (!this.simulationMode && this.connector && order.clob_order_id) {
+      try {
+        const success = await this.connector.cancelOrder(order.clob_order_id);
+        if (!success) return false;
+      } catch (error) {
+        console.error(`Failed to cancel order ${order.clob_order_id}:`, error);
+        return false;
+      }
     }
 
     this.updateOrderStatus(orderId, "cancelled");
@@ -171,6 +284,13 @@ export class ExecutionLayer {
    */
   getAllOrders(): Order[] {
     return Array.from(this.orders.values());
+  }
+
+  /**
+   * Check if in simulation mode
+   */
+  isSimulationMode(): boolean {
+    return this.simulationMode;
   }
 
   /**

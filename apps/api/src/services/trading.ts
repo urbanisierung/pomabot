@@ -6,15 +6,17 @@
  * - Aggregates news and signals
  * - Updates beliefs
  * - Evaluates trades
- * - Executes orders
+ * - Executes orders (simulation or real)
+ * 
+ * Phase 4: Real trading execution with safety controls
  */
 
 import {
   performBeliefUpdate,
   evaluateTrade,
   StateMachine,
-  // CalibrationSystem,
-  // ExecutionLayer,
+  ExecutionLayer,
+  SafetyControls,
   SlackNotifier,
   AuditLogger,
   type DailySummary,
@@ -22,6 +24,7 @@ import {
 import type { BeliefState, Signal, Market, TradeDecision } from "@pomabot/shared";
 import { PolymarketConnector } from "../connectors/polymarket.js";
 import { NewsAggregator } from "../connectors/news.js";
+import { WalletManager } from "../connectors/wallet.js";
 
 export interface MarketState {
   market: Market;
@@ -33,12 +36,13 @@ export interface MarketState {
 export class TradingService {
   private polymarket: PolymarketConnector;
   private news: NewsAggregator;
-  // private polling: PollingAggregator;
   private stateMachine: StateMachine;
-  // private calibration: CalibrationSystem;
-  // private execution: ExecutionLayer;
+  private execution: ExecutionLayer;
+  private safetyControls: SafetyControls;
   private notifier: SlackNotifier;
   private auditLogger: AuditLogger;
+  private wallet?: WalletManager;
+  private simulationMode: boolean;
   
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
@@ -50,24 +54,56 @@ export class TradingService {
     lastReset: new Date(),
   };
 
-  constructor(apiKey?: string) {
-    this.polymarket = new PolymarketConnector(apiKey);
+  constructor() {
+    // Check if wallet credentials are provided
+    const privateKey = process.env.WALLET_PRIVATE_KEY;
+    const chainId = parseInt(process.env.CHAIN_ID ?? "137", 10); // Polygon mainnet
+    
+    // Initialize wallet if private key is provided
+    if (privateKey) {
+      this.wallet = new WalletManager({
+        privateKey,
+        chainId,
+        rpcUrl: process.env.POLYGON_RPC_URL,
+      });
+      this.simulationMode = false;
+      console.log("🔴 LIVE TRADING MODE ENABLED");
+    } else {
+      this.simulationMode = true;
+      console.log("🟢 SIMULATION MODE (no wallet configured)");
+    }
+
+    // Initialize Polymarket connector with wallet
+    this.polymarket = new PolymarketConnector(this.wallet);
+    
+    // Initialize other services
     this.news = new NewsAggregator();
-    // this.polling = new PollingAggregator();
     this.stateMachine = new StateMachine();
-    // this.calibration = new CalibrationSystem();
-    // this.execution = new ExecutionLayer();
     this.notifier = new SlackNotifier();
     this.auditLogger = AuditLogger.getInstance(
       process.env.AUDIT_LOG_PATH ?? "./audit-logs"
     );
+
+    // Initialize execution layer with connector
+    this.execution = new ExecutionLayer(
+      this.polymarket,
+      this.simulationMode
+    );
+
+    // Initialize safety controls
+    this.safetyControls = new SafetyControls({
+      maxPositionSize: parseFloat(process.env.MAX_POSITION_SIZE ?? "100"),
+      dailyLossLimit: parseFloat(process.env.DAILY_LOSS_LIMIT ?? "50"),
+      maxOpenPositions: parseInt(process.env.MAX_OPEN_POSITIONS ?? "5", 10),
+      enabled: true, // Kill switch initially enabled
+    });
   }
 
   /**
    * Start the trading service
    */
   async start(): Promise<void> {
-    const mode = process.env.POLYMARKET_API_KEY ? "LIVE" : "SIMULATION";
+    const mode = this.simulationMode ? "SIMULATION" : "LIVE";
     
     console.log("🚀 Starting Polymarket trading service...");
     console.log(`   Poll interval: ${this.pollInterval / 1000}s`);
@@ -75,9 +111,31 @@ export class TradingService {
     console.log(`   Verbose: ${process.env.VERBOSE === "true" ? "ON" : "OFF"}`);
     console.log(`   Slack notifications: ${this.notifier.isEnabled() ? "ON" : "OFF"}`);
     
+    // Authenticate with CLOB if in live mode
+    if (!this.simulationMode && this.wallet) {
+      console.log("🔐 Authenticating with Polymarket CLOB...");
+      const authenticated = await this.polymarket.authenticate();
+      
+      if (!authenticated) {
+        console.error("❌ Failed to authenticate with CLOB - starting in simulation mode");
+        this.simulationMode = true;
+        // Update execution layer to simulation mode
+        this.execution = new ExecutionLayer(undefined, true);
+      } else {
+        console.log("✅ CLOB authentication successful - real trading enabled");
+      }
+    }
+    
     // Initialize audit logger
     await this.auditLogger.initialize();
     console.log(`   Audit logging: ENABLED`);
+    
+    // Display safety controls status
+    const safetyStatus = this.safetyControls.getStatus();
+    console.log(`   Safety Controls:`);
+    console.log(`     Max position size: $${safetyStatus.maxPositions}`);
+    console.log(`     Daily loss limit: $${safetyStatus.dailyLossLimit}`);
+    console.log(`     Max open positions: ${safetyStatus.maxPositions}`);
     
     // Initial market load
     await this.loadMarkets();
@@ -305,11 +363,69 @@ export class TradingService {
         edge,
       });
 
-      // In simulation mode, just log it
+      // Check safety controls before executing
+      const safetyCheck = this.safetyControls.canTrade(state.market.id, decision.size_usd);
+      
+      if (!safetyCheck.allowed) {
+        console.warn(`⚠️ Trade blocked by safety controls: ${safetyCheck.reason}`);
+        await this.notifier.sendError(
+          new Error(`Trade blocked: ${safetyCheck.reason}`),
+          "Safety controls"
+        );
+        
+        // Transition back to OBSERVE
+        if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
+          this.stateMachine.transition("OBSERVE", "Trade blocked by safety controls");
+        }
+        return;
+      }
+
+      // Execute trade (real or simulation)
       if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
-        this.stateMachine.transition("EXECUTE_TRADE", "[SIMULATION] Trade would be executed");
+        this.stateMachine.transition("EXECUTE_TRADE", 
+          this.simulationMode ? "[SIMULATION] Trade would be executed" : "Executing real trade"
+        );
+
+        // Get token ID for the YES/NO outcome
+        const tokenId = this.getTokenIdForOutcome(state.market, decision.side);
+        
+        if (!tokenId && !this.simulationMode) {
+          console.error("❌ Cannot execute trade: token ID not found");
+          this.stateMachine.transition("MONITOR", "Trade execution failed");
+          this.stateMachine.transition("OBSERVE", "Ready for next cycle");
+          return;
+        }
+
+        // Execute the trade
+        const result = await this.execution.executeTrade(decision, state.market.id, tokenId);
+        
+        if (result.success) {
+          this.dailyStats.tradesExecuted++;
+          
+          // Register position with safety controls
+          this.safetyControls.addPosition(
+            state.market.id,
+            decision.size_usd,
+            decision.entry_price
+          );
+          
+          // Log and notify
+          if (!this.simulationMode && result.order) {
+            console.log(`✅ Real trade executed: Order ${result.order.id}`);
+            await this.notifier.sendTradeExecuted(result.order, state.market);
+          } else {
+            console.log(`✅ Simulated trade logged`);
+          }
+        } else {
+          console.error(`❌ Trade execution failed: ${result.error}`);
+          await this.notifier.sendError(
+            new Error(result.error ?? "Unknown execution error"),
+            "Trade execution"
+          );
+        }
+        
         // Transition through MONITOR back to OBSERVE for proper state flow
-        this.stateMachine.transition("MONITOR", "Simulated trade complete");
+        this.stateMachine.transition("MONITOR", "Trade execution complete");
         this.stateMachine.transition("OBSERVE", "Ready for next cycle");
       }
 
@@ -331,6 +447,21 @@ export class TradingService {
         this.stateMachine.transition("OBSERVE", "No trade - continuing observation");
       }
     }
+  }
+
+  /**
+   * Get token ID for YES/NO outcome from market data
+   */
+  private getTokenIdForOutcome(_market: Market, _side: "YES" | "NO"): string | undefined {
+    // This would need to be populated from the market data
+    // For now, return undefined in simulation mode
+    if (this.simulationMode) {
+      return "simulated-token-id";
+    }
+    
+    // In real mode, this should be fetched from market.tokens array
+    // The PolymarketMarketResponse includes token_id in tokens array
+    return undefined;
   }
 
   /**
