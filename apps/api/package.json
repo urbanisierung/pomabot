@@ -11,8 +11,9 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@pomabot/shared": "workspace:*",
     "@pomabot/core": "workspace:*",
+    "@pomabot/shared": "workspace:*",
+    "ethers": "6.16.0",
     "node-fetch": "3.3.2"
   },
   "devDependencies": {
