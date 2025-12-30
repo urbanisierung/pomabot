@@ -116,7 +116,17 @@ async function main() {
 }
 
 // Start the bot
-main().catch(error => {
+main().catch(async error => {
   console.error("❌ Fatal error:", error);
+  
+  // Try to send error notification
+  try {
+    const { SlackNotifier } = await import("@pomabot/core");
+    const notifier = new SlackNotifier();
+    await notifier.sendError(error as Error, "Fatal startup error");
+  } catch {
+    // Ignore notification errors during fatal error
+  }
+  
   process.exit(1);
 });

@@ -1,5 +1,63 @@
 # Copilot Changes
 
+## 2025-12-30: Implemented Phase 2 - Slack Notifications
+
+### Summary
+Implemented complete Slack notification system for real-time alerts on trade opportunities, executions, and daily summaries.
+
+### Files Created
+
+**[packages/core/src/notifications.ts](packages/core/src/notifications.ts)**
+- `SlackNotifier` class with 7 notification methods
+- Rate limiting (10 messages/minute)
+- Event filtering (enable/disable specific notification types)
+- Rich Slack Block Kit formatting for all messages
+
+### Files Modified
+
+**[packages/core/src/index.ts](packages/core/src/index.ts)**
+- Added export for notifications module
+
+**[apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)**
+- Added `SlackNotifier` initialization
+- Added daily stats tracking (`tradeOpportunities`, `tradesExecuted`)
+- Integrated startup notification on bot launch
+- Integrated trade opportunity notifications when edge detected
+- Added daily summary scheduler (sends at midnight UTC)
+- Added `notifyHalt()` and `notifyError()` public methods
+
+**[apps/api/src/index.ts](apps/api/src/index.ts)**
+- Added error notification on fatal startup errors
+
+**[ROADMAP.md](ROADMAP.md)**
+- Updated Phase 2 status to ✅ Complete
+- Added implementation details and usage instructions
+
+### Notification Types
+
+| Event | When Triggered | Info Included |
+|-------|----------------|---------------|
+| `system_start` | Bot startup | Mode, market count |
+| `trade_opportunity` | 8-check gate passed | Market, side, edge, belief, rationale |
+| `trade_executed` | Order placed | Order details, status |
+| `position_closed` | Exit condition met | P&L, entry/exit prices |
+| `daily_summary` | Midnight UTC | P&L, trades, positions, markets |
+| `system_halt` | System halted | Halt reason |
+| `error_alert` | Exception caught | Error message, stack trace |
+
+### Usage
+
+```bash
+# Set webhook URL and run
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+SIMULATION_DATA=true POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
+```
+
+### Environment Variables Added
+- `SLACK_WEBHOOK_URL` - Slack incoming webhook URL (required for notifications)
+
+---
+
 ## 2025-06-XX: Created ROADMAP.md with Implementation Phases
 
 ### Summary

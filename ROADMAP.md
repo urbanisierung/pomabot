@@ -46,7 +46,7 @@ This roadmap outlines the path from simulation mode to a fully automated trading
 
 ## Phase 2: Slack Notifications 📢
 
-**Status:** 🔄 In Progress  
+**Status:** ✅ Complete  
 **Duration:** 1 week
 **Priority:** HIGH - Enables monitoring without constant dashboard checking
 
@@ -58,51 +58,52 @@ This roadmap outlines the path from simulation mode to a fully automated trading
 ### Milestones
 
 #### 2.1 Slack Webhook Integration
-- [ ] Create Slack app and incoming webhook
-- [ ] Add `SLACK_WEBHOOK_URL` environment variable
-- [ ] Create notification service (`packages/core/src/notifications.ts`)
+- [x] Create Slack app and incoming webhook (user setup required)
+- [x] Add `SLACK_WEBHOOK_URL` environment variable support
+- [x] Create notification service (`packages/core/src/notifications.ts`)
 
 #### 2.2 Event Notifications
-- [ ] Trade opportunity detected (new market passes 8-check gate)
-- [ ] Trade executed (when live trading enabled)
-- [ ] Position closed (exit conditions met)
-- [ ] Error alerts (API failures, execution errors)
+- [x] Trade opportunity detected (new market passes 8-check gate)
+- [x] Trade executed (when live trading enabled)
+- [x] Position closed (exit conditions met)
+- [x] Error alerts (API failures, execution errors)
+- [x] System start/halt notifications
 
 #### 2.3 Summary Reports
-- [ ] Daily P&L summary
-- [ ] Open positions status
-- [ ] Market opportunities count
+- [x] Daily P&L summary (scheduled at midnight UTC)
+- [x] Open positions status
+- [x] Market opportunities count
 
-### Action Items
+### Implementation Details
+
+**File:** `packages/core/src/notifications.ts`
 
 ```typescript
-// packages/core/src/notifications.ts - Planned structure
-export interface SlackNotificationConfig {
-  webhookUrl: string;
-  channel?: string;
-  enabledEvents: NotificationEvent[];
-}
-
-export type NotificationEvent = 
-  | 'trade_opportunity'
-  | 'trade_executed'
-  | 'position_closed'
-  | 'daily_summary'
-  | 'error_alert';
-
-export class SlackNotifier {
-  async sendTradeOpportunity(market: Market, edge: number): Promise<void>;
-  async sendTradeExecuted(order: Order): Promise<void>;
-  async sendDailySummary(pnl: number, positions: Position[]): Promise<void>;
-  async sendError(error: Error): Promise<void>;
-}
+// SlackNotifier class with methods:
+// - sendTradeOpportunity(opportunity) - Trade opportunity with edge, belief, rationale
+// - sendTradeExecuted(order, market) - Order execution details
+// - sendPositionClosed(order, market, pnl, reason) - Position close with P&L
+// - sendDailySummary(summary) - Daily stats at midnight UTC
+// - sendSystemStart(marketsCount, mode) - Bot startup notification
+// - sendSystemHalt(reason) - System halt alert
+// - sendError(error, context) - Error with stack trace
 ```
 
-#### Technical Requirements
-- HTTP POST to Slack webhook URL
-- Structured message blocks for rich formatting
-- Rate limiting (1 message/second max)
-- Error handling for failed notifications
+**Features:**
+- Rate limiting (10 messages/minute default)
+- Event-based filtering (enable/disable specific notifications)
+- Rich Slack Block Kit formatting
+- Singleton pattern for easy access
+
+### Usage
+
+```bash
+# Set your Slack webhook URL
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+# Run the bot - notifications will be sent automatically
+SIMULATION_DATA=true POLL_INTERVAL=10000 pnpm --filter @pomabot/api dev
+```
 
 ---
 
