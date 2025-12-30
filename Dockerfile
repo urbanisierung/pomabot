@@ -5,7 +5,7 @@
 FROM node:24-alpine AS builder
 
 # Install pnpm
-RUN npm install -g pnpm@9.15.4
+RUN npm install -g pnpm@10.26.2
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN pnpm run build
 FROM node:24-alpine AS runner
 
 # Install pnpm for production dependencies
-RUN npm install -g pnpm@9.15.4
+RUN npm install -g pnpm@10.26.2
 
 WORKDIR /app
 
