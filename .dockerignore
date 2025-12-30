@@ -1,0 +1,52 @@
+# Node modules (installed in Docker)
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Build artifacts (built in Docker)
+dist
+build
+out
+.next
+
+# Git files
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+!README.md
+DEPLOYMENT.md
+ROADMAP.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files (use fly secrets)
+.env
+.env.*
+
+# Test files
+coverage
+*.test.ts
+*.test.js
+__tests__
+
+# Temporary files
+tmp
+temp
+*.tmp
+*.log
+
+# Audit logs (not needed in image)
+audit-logs/
+*.csv

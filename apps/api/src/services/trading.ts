@@ -16,6 +16,7 @@ import {
   // CalibrationSystem,
   // ExecutionLayer,
   SlackNotifier,
+  AuditLogger,
   type DailySummary,
 } from "@pomabot/core";
 import type { BeliefState, Signal, Market, TradeDecision } from "@pomabot/shared";
@@ -37,6 +38,7 @@ export class TradingService {
   // private calibration: CalibrationSystem;
   // private execution: ExecutionLayer;
   private notifier: SlackNotifier;
+  private auditLogger: AuditLogger;
   
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
@@ -56,6 +58,9 @@ export class TradingService {
     // this.calibration = new CalibrationSystem();
     // this.execution = new ExecutionLayer();
     this.notifier = new SlackNotifier();
+    this.auditLogger = AuditLogger.getInstance(
+      process.env.AUDIT_LOG_PATH ?? "./audit-logs"
+    );
   }
 
   /**
@@ -70,8 +75,15 @@ export class TradingService {
     console.log(`   Verbose: ${process.env.VERBOSE === "true" ? "ON" : "OFF"}`);
     console.log(`   Slack notifications: ${this.notifier.isEnabled() ? "ON" : "OFF"}`);
     
+    // Initialize audit logger
+    await this.auditLogger.initialize();
+    console.log(`   Audit logging: ENABLED`);
+    
     // Initial market load
     await this.loadMarkets();
+    
+    // Log system start
+    await this.auditLogger.logSystemStart(this.marketStates.size, mode);
     
     // Send startup notification
     await this.notifier.sendSystemStart(this.marketStates.size, mode);
@@ -122,6 +134,7 @@ export class TradingService {
 
     } catch (error) {
       console.error("Error in monitoring loop:", error);
+      await this.auditLogger.logError(error as Error, "Monitoring loop error");
     }
   }
 
@@ -276,6 +289,14 @@ export class TradingService {
       // Track for daily summary
       this.dailyStats.tradeOpportunities++;
       
+      // Log trade opportunity
+      await this.auditLogger.logTradeOpportunity(
+        state.market,
+        state.belief,
+        edge,
+        decision.rationale
+      );
+      
       // Send Slack notification
       await this.notifier.sendTradeOpportunity({
         market: state.market,
@@ -293,6 +314,14 @@ export class TradingService {
       }
 
     } else if ("eligible" in decision && !decision.eligible) {
+      // Log evaluation result
+      await this.auditLogger.logMarketEvaluated(
+        state.market,
+        state.belief,
+        false,
+        decision.reason
+      );
+      
       // Verbose logging in simulation mode
       if (process.env.VERBOSE === "true") {
         console.log(`⏸️ No trade for ${state.market.question}: ${decision.reason}`);
@@ -405,6 +434,17 @@ export class TradingService {
       marketsMonitored: this.marketStates.size,
     };
     
+    // Log daily summary
+    await this.auditLogger.logDailySummary({
+      date: dateStr,
+      totalMarkets: this.marketStates.size,
+      opportunitiesFound: this.dailyStats.tradeOpportunities,
+      tradesExecuted: this.dailyStats.tradesExecuted,
+      positionsClosed: 0,
+      totalPnL: 0,
+      systemUptime: 24, // TODO: Track actual uptime
+    });
+    
     await this.notifier.sendDailySummary(summary);
     
     // Reset daily stats
@@ -421,6 +461,7 @@ export class TradingService {
    * Send halt notification
    */
   async notifyHalt(reason: string): Promise<void> {
+    await this.auditLogger.logSystemStop(reason);
     await this.notifier.sendSystemHalt(reason);
   }
 
@@ -428,6 +469,7 @@ export class TradingService {
    * Send error notification
    */
   async notifyError(error: Error, context?: string): Promise<void> {
+    await this.auditLogger.logError(error, context);
     await this.notifier.sendError(error, context);
   }
 }

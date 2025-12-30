@@ -1,0 +1,35 @@
+# Fly.io deployment configuration for PomaBot
+# Cost-optimized for $2-5/month hosting
+
+app = "pomabot"
+primary_region = "fra"  # Frankfurt (adjust based on your location)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  API_PORT = "4000"
+  POLL_INTERVAL = "60000"  # 1 minute polling interval
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"      # Stop when idle to save costs
+  auto_start_machines = true       # Auto-start on HTTP request
+  min_machines_running = 0         # Allow scaling to zero
+  
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 100
+    hard_limit = 200
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"                 # Minimal memory for cost savings
+
+# Persistent volume for audit logs (optional - can use Git instead)
+# Uncomment if you want to use Fly.io volumes instead of Git
+# [[mounts]]
+#   source = "pomabot_data"
+#   destination = "/app/audit-logs"
