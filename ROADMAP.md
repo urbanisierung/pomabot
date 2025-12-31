@@ -450,43 +450,117 @@ REDDIT_CLIENT_ID=abc123 REDDIT_CLIENT_SECRET=xyz789 pnpm --filter @pomabot/api d
 
 ## Phase 6: Additional Data Sources 📰
 
-**Status:** 📋 Planned  
-**Duration:** 3-4 weeks
-**Priority:** LOW - Future enhancement
+**Status:** ✅ Complete  
+**Duration:** 1 week
+**Priority:** MEDIUM - Enhances prediction accuracy
 
 ### Goals
 - Diverse data sources for better predictions
 - Multi-source signal aggregation
 - Reduced dependency on any single source
 
-### Potential Sources
+### Implementation Summary
 
-#### 6.1 News APIs
-- [ ] NewsAPI.org for headlines
-- [ ] Bing News Search
-- [ ] Google News RSS
+Phase 6 implements comprehensive news integration through RSS feeds, providing the belief engine with real-time news signals from authoritative sources across multiple market categories.
 
-#### 6.2 Prediction Markets
-- [ ] Metaculus (scientific forecasts)
-- [ ] Manifold Markets (user predictions)
-- [ ] Kalshi (regulated markets)
+### Milestones
 
-#### 6.3 Social Media
-- [ ] Twitter/X API (if accessible)
-- [ ] Telegram groups
-- [ ] Discord sentiment
+#### 6.1 News RSS Feed Integration ✅
+- [x] RSS feed parsing using `rss-parser` library
+- [x] Organized feeds by market category
+- [x] Rate limiting (5-minute minimum between fetches per source)
+- [x] News deduplication by title similarity
+- [x] Fallback to simulation data for testing
 
-#### 6.4 Official Sources
-- [ ] Government data feeds
-- [ ] Sports APIs (for sports markets)
-- [ ] Economic indicators (FRED API)
+**RSS Sources by Category:**
+
+| Market Category | Sources |
+|-----------------|---------|
+| Politics | SEC press releases, Associated Press |
+| Crypto | SEC, CoinTelegraph, CoinDesk |
+| Sports | ESPN, BBC Sport |
+| Economics | Federal Reserve, Reuters Business, MarketWatch |
+| Entertainment | Variety, Hollywood Reporter, Deadline |
+| Technology | TechCrunch, The Verge, Ars Technica |
+| World | Reuters World, UN, BBC World, Al Jazeera |
+| Weather | NOAA |
+
+#### 6.2 Signal Generation from News ✅
+- [x] Relevance scoring based on keyword matching
+- [x] Signal type classification (authoritative, procedural, quantitative, interpretive, speculative)
+- [x] Sentiment analysis (positive/negative/neutral direction)
+- [x] Strength calculation (1-5 scale) based on source credibility
+
+```typescript
+// News signal generation flow
+const allNews = await newsAggregator.fetchNews(category);
+const signals = await newsAggregator.generateSignals(allNews, marketKeywords);
+
+// Signals are automatically integrated by TradingService
+// No additional configuration required
+```
+
+#### 6.3 Integration with TradingService ✅
+- [x] Automatic news fetching during market evaluation
+- [x] News signals combined with Reddit signals
+- [x] Unified signal processing through belief engine
+- [x] No configuration required - works out of the box
+
+### Features
+
+**Intelligent Signal Classification:**
+- **Authoritative** (±20%): Official statements, SEC rulings
+- **Procedural** (±15%): Filing submissions, deadlines
+- **Quantitative** (±10%): Data, statistics, polls
+- **Interpretive** (±7%): Expert analysis, predictions
+- **Speculative** (±3%): Rumors, unconfirmed reports
+
+**Smart Relevance Scoring:**
+- Title matches: +0.3 relevance
+- Content matches: +0.15 relevance
+- Minimum threshold: 0.3 to generate signal
+
+**Automatic Deduplication:**
+- Prevents duplicate signals from similar headlines
+- Normalizes titles for comparison
+
+### Testing
+
+Test script validates all functionality:
+
+```bash
+# Run news integration test
+npx tsx apps/api/src/test-news.ts
+```
+
+Tests cover:
+1. RSS feed fetching from multiple sources
+2. Category-specific news filtering
+3. Signal generation with keyword matching
+4. Simulation data fallback
+
+### Future Enhancements
+
+The following data sources are planned for future phases:
+
+#### Potential Sources (Phase 7+)
+- [ ] NewsAPI.org for broader headline coverage
+- [ ] Prediction Markets (Metaculus, Manifold Markets, Kalshi)
+- [ ] Social Media (Twitter/X API, Telegram groups)
+- [ ] Official Government APIs (economic indicators, sports stats)
+- [ ] Weather APIs (NOAA, AccuWeather)
 
 ### Action Items
-- [ ] Evaluate API costs and rate limits
-- [ ] Design unified signal interface
-- [ ] Implement source adapters
-- [ ] Build aggregation layer
-- [ ] A/B test prediction accuracy improvements
+- [x] Design RSS feed integration architecture
+- [x] Install and configure rss-parser library
+- [x] Implement RSS feed fetching by category
+- [x] Add rate limiting and error handling
+- [x] Build news deduplication logic
+- [x] Enhance signal generation with relevance scoring
+- [x] Create comprehensive test suite
+- [x] Integrate with existing TradingService (already integrated)
+- [x] Document RSS feed sources
+- [x] Test with simulation data
 
 ---
 
@@ -603,7 +677,7 @@ Before enabling live trading:
 | 3 | Fly.io Deployment & Audit Logging | 1-2 weeks | ✅ Complete |
 | 4 | Real Trading Execution | 2-3 weeks | ✅ Complete |
 | 5 | Reddit Data Integration | 2-3 weeks | ✅ Complete |
-| 6 | Additional Data Sources | 3-4 weeks | 📋 Future |
+| 6 | Additional Data Sources (News RSS) | 1 week | ✅ Complete |
 | 7 | Advanced Features | Ongoing | 📋 Future |
 
 ---
@@ -619,4 +693,4 @@ When working on any phase:
 
 ---
 
-*Last updated: December 2025*
+*Last updated: December 31, 2025*
