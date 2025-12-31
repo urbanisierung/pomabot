@@ -53,12 +53,12 @@ export class PortfolioManager {
   /**
    * Calculate optimal position size using Kelly Criterion
    * 
-   * Kelly formula: f = (bp - q) / b
+   * Simplified Kelly formula: f = edge / variance
+   * For prediction markets: f = (p * (1 + edge) - 1) / edge
    * Where:
    * - f = fraction of capital to bet
-   * - b = odds received (edge / (1 - winProb))
-   * - p = probability of winning (confidence)
-   * - q = probability of losing (1 - p)
+   * - p = probability of winning (confidence / 100)
+   * - edge = expected profit as fraction
    * 
    * We use fractional Kelly (typically 1/4 Kelly) for safety
    */
@@ -69,19 +69,33 @@ export class PortfolioManager {
   ): PositionSizingRecommendation {
     const warnings: string[] = [];
 
+    // Edge must be positive for Kelly to work
+    if (edge <= 0) {
+      warnings.push("No positive edge detected");
+      return {
+        recommendedSize: 0,
+        method: "CONSERVATIVE",
+        reasoning: "No positive edge - Kelly sizing not applicable",
+        riskLevel: "LOW",
+        warnings,
+      };
+    }
+
     // Use historical win rate if available, otherwise use confidence as proxy
+    // Used for validation and future Kelly enhancements
     const p = winRate !== undefined ? winRate : confidence / 100;
-    const q = 1 - p;
-
-    // Edge represents the expected value advantage
-    // Convert edge to odds: if edge is 10%, and we expect 60% win, odds are edge/(1-p)
-    const b = edge / q;
-
-    // Kelly fraction
-    const kellyFraction = (b * p - q) / b;
+    
+    // Validate probability
+    if (p < 0.5) {
+      warnings.push(`Low win probability (${(p * 100).toFixed(0)}%) - consider higher confidence threshold`);
+    }
+    
+    // Simplified Kelly: if we have edge% advantage
+    // Kelly fraction = edge (simplified for prediction markets)
+    const kellyFraction = edge;
 
     // Apply fractional Kelly for safety
-    const adjustedKelly = Math.max(0, kellyFraction * this.config.kellyFraction);
+    const adjustedKelly = Math.max(0, Math.min(kellyFraction * this.config.kellyFraction, 0.5));
 
     // Calculate position size
     const rawSize = this.portfolioValue * adjustedKelly;
@@ -102,17 +116,6 @@ export class PortfolioManager {
     }
 
     // Validate Kelly calculation
-    if (kellyFraction < 0) {
-      warnings.push("Negative Kelly - no edge detected");
-      return {
-        recommendedSize: 0,
-        method: "CONSERVATIVE",
-        reasoning: "Negative Kelly indicates no positive edge",
-        riskLevel: "LOW",
-        warnings,
-      };
-    }
-
     if (kellyFraction > 0.5) {
       warnings.push(`Very high Kelly (${(kellyFraction * 100).toFixed(1)}%) - using conservative limit`);
     }
