@@ -566,31 +566,124 @@ The following data sources are planned for future phases:
 
 ## Phase 7: Advanced Features 🚀
 
-**Status:** 📋 Future
-**Duration:** Ongoing
+**Status:** ✅ Complete  
+**Duration:** 1-2 weeks
+**Priority:** MEDIUM - Enhances trading performance and observability
 
-### Potential Enhancements
+### Goals
+- Historical trade performance analysis
+- Risk-adjusted position sizing
+- Enhanced observability and visualization
 
-#### 7.1 Machine Learning
-- [ ] Historical trade analysis
-- [ ] Pattern recognition in price movements
-- [ ] Optimal entry/exit timing
+### Milestones
 
-#### 7.2 Portfolio Management
-- [ ] Risk-adjusted position sizing
-- [ ] Correlation-based diversification
-- [ ] Drawdown protection
+#### 7.1 Machine Learning / Historical Analysis ✅
+- [x] Trade history analyzer with CSV parsing
+- [x] Performance metrics calculation (win rate, P&L, profit factor, etc.)
+- [x] Pattern recognition by category, edge range, belief width
+- [x] Time-of-day performance analysis
+- [x] Edge accuracy tracking
+
+#### 7.2 Portfolio Management ✅
+- [x] Risk-adjusted position sizing using Kelly Criterion
+- [x] Simplified Kelly formula for prediction markets
+- [x] Correlation-based diversification checks
+- [x] Drawdown protection with portfolio peak tracking
+- [x] Position tracking and unrealized P&L calculation
+- [x] Portfolio status monitoring (capital allocation, open positions)
 
 #### 7.3 Market Making
 - [ ] Two-sided quotes
 - [ ] Spread capture strategies
 - [ ] Inventory management
 
-#### 7.4 Web Dashboard Enhancements
-- [ ] Historical performance charts
-- [ ] P&L tracking
-- [ ] Trade journal
-- [ ] Strategy backtesting
+**Note:** Market making deferred to future phase as it requires more sophisticated infrastructure.
+
+#### 7.4 Web Dashboard Enhancements ✅
+- [x] Performance metrics dashboard component
+- [x] P&L tracking visualization
+- [x] Trade journal with recent trades table
+- [x] Portfolio status display
+- [x] Pattern analysis visualization (best/worst categories)
+- [x] Navigation between dashboard and performance views
+
+### Implementation Details
+
+**Files Created:**
+- `packages/core/src/trade-history.ts` - Historical trade analysis with pattern recognition
+- `packages/core/src/portfolio-manager.ts` - Portfolio management with Kelly Criterion
+- `apps/web/src/components/PerformanceDashboard.tsx` - Performance visualization component
+- `apps/web/src/pages/performance.astro` - Performance dashboard page
+
+**Files Modified:**
+- `packages/core/src/index.ts` - Export new modules
+- `apps/api/src/index.ts` - Add `/api/performance`, `/api/trade-history`, `/api/portfolio` endpoints
+- `apps/api/src/services/trading.ts` - Integrate trade history and portfolio manager
+- `apps/web/src/layouts/Layout.astro` - Add navigation links
+
+**Features:**
+- **Trade History Analysis:**
+  - Loads trade data from audit logs
+  - Calculates comprehensive performance metrics
+  - Identifies winning/losing patterns by category
+  - Analyzes optimal edge ranges and belief widths
+  - Time-of-day performance tracking
+
+- **Portfolio Management:**
+  - Kelly Criterion position sizing (quarter-Kelly for safety)
+  - Automatic risk limit enforcement (max 2% per trade default)
+  - Category concentration detection
+  - Keyword-based correlation analysis
+  - Drawdown tracking and protection
+  - Real-time portfolio status
+
+- **Web Dashboard:**
+  - Real-time performance metrics display
+  - Historical P&L tracking
+  - Trade journal with sortable columns
+  - Pattern analysis visualization
+  - Responsive design with auto-refresh
+
+### Environment Configuration
+
+```bash
+# Portfolio Management (optional - Phase 7 enhancements)
+PORTFOLIO_CAPITAL=1000              # Total capital for trading (default: 1000)
+MAX_RISK_PER_TRADE=0.02            # Max % of capital per trade (default: 2%)
+KELLY_FRACTION=0.25                # Fraction of Kelly to use (default: 0.25 = quarter-Kelly)
+CORRELATION_THRESHOLD=0.7          # Max correlation for diversification (default: 0.7)
+MAX_DRAWDOWN_PERCENT=10            # Max portfolio drawdown % (default: 10%)
+```
+
+### Testing
+
+Comprehensive test suites added:
+- `packages/core/src/trade-history.test.ts` - 6 tests for trade history analysis
+- `packages/core/src/portfolio-manager.test.ts` - 14 tests for portfolio management
+
+All 77 tests passing ✅
+
+### Usage
+
+```bash
+# View performance dashboard
+# Navigate to http://localhost:3000/performance
+
+# API endpoints available:
+GET /api/performance      # Performance metrics and pattern analysis
+GET /api/trade-history    # Historical trade records
+GET /api/portfolio        # Current portfolio status
+```
+
+### Future Enhancements (Phase 8+)
+
+The following features are planned for future phases:
+- [ ] Advanced ML for price prediction
+- [ ] Market making strategies
+- [ ] Backtesting framework with historical data
+- [ ] Advanced charting with time series visualization
+- [ ] Strategy optimization using genetic algorithms
+- [ ] Multi-timeframe analysis
 
 ---
 
@@ -678,7 +771,7 @@ Before enabling live trading:
 | 4 | Real Trading Execution | 2-3 weeks | ✅ Complete |
 | 5 | Reddit Data Integration | 2-3 weeks | ✅ Complete |
 | 6 | Additional Data Sources (News RSS) | 1 week | ✅ Complete |
-| 7 | Advanced Features | Ongoing | 📋 Future |
+| 7 | Advanced Features (Analysis & Portfolio) | 1-2 weeks | ✅ Complete |
 
 ---
 

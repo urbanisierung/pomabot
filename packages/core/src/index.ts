@@ -10,3 +10,5 @@ export * from "./execution.js";
 export * from "./notifications.js";
 export * from "./audit-log.js";
 export * from "./safety-controls.js";
+export * from "./trade-history.js";
+export * from "./portfolio-manager.js";
