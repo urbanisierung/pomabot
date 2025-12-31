@@ -12,7 +12,7 @@
  * - Memory-efficient processing
  */
 
-import type { Market, BeliefState, Signal, TradeDecision } from "@pomabot/shared";
+import type { Market, BeliefState, Signal, TradeDecision, ResolutionCriteria } from "@pomabot/shared";
 import { performBeliefUpdate } from "./belief-engine.js";
 import { evaluateTrade } from "./trade-engine.js";
 
@@ -247,7 +247,7 @@ export class BatchProcessor {
     const result = evaluateTrade(belief, market, criteria);
     
     // Check if result is a TradeDecision or TradeEligibilityResult
-    let decision: import("@pomabot/shared").TradeDecision;
+    let decision: TradeDecision;
     if ("side" in result) {
       // It's a TradeDecision
       decision = result;
@@ -362,7 +362,7 @@ export class BatchProcessor {
    * Create resolution criteria for a market
    * Uses heuristics based on market characteristics
    */
-  private createResolutionCriteria(market: Market): import("@pomabot/shared").ResolutionCriteria {
+  private createResolutionCriteria(market: Market): ResolutionCriteria {
     // For batch processing, we assume most markets have clear resolution criteria
     // This is a simplification - in production, this should be more sophisticated
     return {

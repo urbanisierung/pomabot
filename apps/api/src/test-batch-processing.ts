@@ -54,7 +54,7 @@ function generateMockMarkets(count: number): Market[] {
   const markets: Market[] = [];
 
   for (let i = 0; i < count; i++) {
-    const category = categories[i % categories.length] ?? "other";
+    const category = categories[i % categories.length] as MarketCategory;
     const price = 30 + Math.random() * 40; // Random price between 30-70
     const liquidity = 5000 + Math.random() * 45000; // Random liquidity 5k-50k
 
