@@ -81,13 +81,34 @@ async function main() {
       return;
     }
 
+    if (req.url === "/api/performance") {
+      const performance = tradingService.getPerformanceMetrics();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(performance));
+      return;
+    }
+
+    if (req.url === "/api/trade-history") {
+      const history = tradingService.getTradeHistory();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(history));
+      return;
+    }
+
+    if (req.url === "/api/portfolio") {
+      const portfolio = tradingService.getPortfolioStatus();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(portfolio));
+      return;
+    }
+
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
   });
 
   server.listen(HTTP_PORT, () => {
     console.log(`🌐 HTTP API server running on http://localhost:${HTTP_PORT}`);
-    console.log(`   Endpoints: /api/status, /api/markets, /api/health`);
+    console.log(`   Endpoints: /api/status, /api/markets, /api/health, /api/performance, /api/trade-history, /api/portfolio`);
   });
 
   // Log status every 5 minutes

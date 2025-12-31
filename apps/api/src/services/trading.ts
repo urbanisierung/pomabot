@@ -19,6 +19,8 @@ import {
   SafetyControls,
   SlackNotifier,
   AuditLogger,
+  TradeHistoryAnalyzer,
+  PortfolioManager,
   type DailySummary,
 } from "@pomabot/core";
 import type { BeliefState, Signal, Market, TradeDecision } from "@pomabot/shared";
@@ -46,6 +48,10 @@ export class TradingService {
   private wallet?: WalletManager;
   private simulationMode: boolean;
   private redditEnabled: boolean;
+  
+  // Phase 7: Advanced features
+  private tradeHistory: TradeHistoryAnalyzer;
+  private portfolioManager: PortfolioManager;
   
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
@@ -119,6 +125,19 @@ export class TradingService {
       dailyLossLimit: parseFloat(process.env.DAILY_LOSS_LIMIT ?? "50"),
       maxOpenPositions: parseInt(process.env.MAX_OPEN_POSITIONS ?? "5", 10),
       enabled: true, // Kill switch initially enabled
+    });
+
+    // Phase 7: Initialize advanced features
+    this.tradeHistory = new TradeHistoryAnalyzer(
+      process.env.AUDIT_LOG_PATH ?? "./audit-logs"
+    );
+    
+    this.portfolioManager = new PortfolioManager({
+      totalCapital: parseFloat(process.env.PORTFOLIO_CAPITAL ?? "1000"),
+      maxRiskPerTrade: parseFloat(process.env.MAX_RISK_PER_TRADE ?? "0.02"), // 2%
+      kellyFraction: parseFloat(process.env.KELLY_FRACTION ?? "0.25"), // Quarter-Kelly
+      correlationThreshold: parseFloat(process.env.CORRELATION_THRESHOLD ?? "0.7"),
+      maxDrawdownPercent: parseFloat(process.env.MAX_DRAWDOWN_PERCENT ?? "10"),
     });
   }
 
@@ -678,5 +697,37 @@ export class TradingService {
   async notifyError(error: Error, context?: string): Promise<void> {
     await this.auditLogger.logError(error, context);
     await this.notifier.sendError(error, context);
+  }
+
+  /**
+   * Phase 7: Get performance metrics from trade history
+   */
+  async getPerformanceMetrics() {
+    await this.tradeHistory.loadTradeHistory();
+    const metrics = this.tradeHistory.calculatePerformanceMetrics();
+    const patterns = this.tradeHistory.analyzePatterns();
+    
+    return {
+      metrics,
+      patterns,
+      recentTrades: this.tradeHistory.getRecentTrades(30),
+    };
+  }
+
+  /**
+   * Phase 7: Get trade history
+   */
+  getTradeHistory() {
+    return {
+      trades: this.tradeHistory.getTradeRecords(),
+      total: this.tradeHistory.getTradeRecords().length,
+    };
+  }
+
+  /**
+   * Phase 7: Get portfolio status
+   */
+  getPortfolioStatus() {
+    return this.portfolioManager.getPortfolioStatus();
   }
 }
