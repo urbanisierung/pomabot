@@ -47,18 +47,24 @@ export class NewsAggregator {
     ],
     economics: [
       "https://www.federalreserve.gov/feeds/press_all.xml",
+      "https://www.reuters.com/rssFeed/businessNews",
     ],
     entertainment: [
       "https://variety.com/feed/",
       "https://www.hollywoodreporter.com/feed/",
       "https://deadline.com/feed/",
     ],
-    weather: [],
+    weather: [
+      "https://www.noaa.gov/rss",
+    ],
     technology: [
       "https://techcrunch.com/feed/",
       "https://www.theverge.com/rss/index.xml",
     ],
-    world: [],
+    world: [
+      "https://www.reuters.com/rssFeed/worldNews",
+      "https://www.un.org/en/rss.xml",
+    ],
     other: [],
   };
 
@@ -84,7 +90,7 @@ export class NewsAggregator {
       // Determine which categories to fetch
       const categoriesToFetch: MarketCategory[] = category 
         ? [category]
-        : ["politics", "crypto", "sports", "economics", "entertainment", "technology"];
+        : ["politics", "crypto", "sports", "economics", "entertainment", "technology", "world", "weather"];
 
       // Fetch from RSS feeds for each category
       for (const cat of categoriesToFetch) {

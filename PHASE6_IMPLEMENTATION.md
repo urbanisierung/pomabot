@@ -15,9 +15,11 @@ The NewsAggregator fetches news from curated RSS feeds organized by market categ
 | **Politics** | SEC press releases |
 | **Crypto** | SEC, CoinTelegraph, CoinDesk |
 | **Sports** | ESPN |
-| **Economics** | Federal Reserve |
+| **Economics** | Federal Reserve, Reuters Business |
 | **Entertainment** | Variety, Hollywood Reporter, Deadline |
 | **Technology** | TechCrunch, The Verge |
+| **World** | Reuters World, UN |
+| **Weather** | NOAA |
 
 ### Signal Generation
 
@@ -123,11 +125,15 @@ All feeds are free, publicly available, and require no API keys:
 - **CoinDesk**: `https://www.coindesk.com/arc/outboundfeeds/rss/`
 - **ESPN**: `https://www.espn.com/espn/rss/news`
 - **Federal Reserve**: `https://www.federalreserve.gov/feeds/press_all.xml`
+- **Reuters Business**: `https://www.reuters.com/rssFeed/businessNews`
+- **Reuters World**: `https://www.reuters.com/rssFeed/worldNews`
 - **Variety**: `https://variety.com/feed/`
 - **Hollywood Reporter**: `https://www.hollywoodreporter.com/feed/`
 - **Deadline**: `https://deadline.com/feed/`
 - **TechCrunch**: `https://techcrunch.com/feed/`
 - **The Verge**: `https://www.theverge.com/rss/index.xml`
+- **UN**: `https://www.un.org/en/rss.xml`
+- **NOAA**: `https://www.noaa.gov/rss`
 
 ### Adding New Feeds
 

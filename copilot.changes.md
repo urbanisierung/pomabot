@@ -690,9 +690,11 @@ The NewsAggregator now fetches from curated RSS feeds organized by market catego
 | **Politics** | SEC press releases |
 | **Crypto** | SEC, CoinTelegraph, CoinDesk |
 | **Sports** | ESPN |
-| **Economics** | Federal Reserve |
+| **Economics** | Federal Reserve, Reuters Business |
 | **Entertainment** | Variety, Hollywood Reporter, Deadline |
 | **Technology** | TechCrunch, The Verge |
+| **World** | Reuters World, UN |
+| **Weather** | NOAA |
 
 ### Signal Generation Features
 
