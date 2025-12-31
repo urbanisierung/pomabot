@@ -15,6 +15,7 @@
  */
 
 import type { Signal, SignalType, MarketCategory } from "@pomabot/shared";
+import Parser from "rss-parser";
 
 export interface NewsItem {
   source: string;
@@ -27,14 +28,14 @@ export interface NewsItem {
 }
 
 export class NewsAggregator {
-  // RSS feeds and APIs for future implementation
-  // Organized by market category
-  // @ts-expect-error - Reserved for future implementation when RSS feeds are integrated
-  private readonly NEWS_SOURCES = {
+  private parser: Parser;
+  private lastFetchTime: Map<string, number> = new Map();
+  private minFetchInterval = 300000; // 5 minutes between fetches per source
+  
+  // RSS feeds organized by market category
+  private readonly RSS_SOURCES: Record<MarketCategory, string[]> = {
     politics: [
       "https://www.sec.gov/news/pressreleases.rss",
-      "https://www.fivethirtyeight.com/",  // Polling data
-      "https://www.realclearpolitics.com/", // Polling aggregator
     ],
     crypto: [
       "https://www.sec.gov/news/pressreleases.rss", // Crypto regulation
@@ -43,35 +44,35 @@ export class NewsAggregator {
     ],
     sports: [
       "https://www.espn.com/espn/rss/news",
-      "https://www.usatoday.com/sports/",
-      // Official league APIs would be integrated here
     ],
     economics: [
-      "https://www.bea.gov/", // Bureau of Economic Analysis
       "https://www.federalreserve.gov/feeds/press_all.xml",
-      "https://www.reuters.com/rssFeed/businessNews",
-      "https://www.bloomberg.com/economics",
     ],
     entertainment: [
       "https://variety.com/feed/",
       "https://www.hollywoodreporter.com/feed/",
       "https://deadline.com/feed/",
     ],
-    weather: [
-      "https://www.weather.gov/", // National Weather Service API
-      "https://www.noaa.gov/rss",
-      // AccuWeather API would be integrated here
-    ],
+    weather: [],
     technology: [
       "https://techcrunch.com/feed/",
       "https://www.theverge.com/rss/index.xml",
-      // Company press releases, patent databases
     ],
-    world: [
-      "https://www.reuters.com/rssFeed/worldNews",
-      "https://www.un.org/en/rss.xml",
-    ],
+    world: [],
+    other: [],
   };
+
+  constructor() {
+    this.parser = new Parser({
+      timeout: 10000,
+      customFields: {
+        item: [
+          ['description', 'summary'],
+          ['content:encoded', 'content']
+        ]
+      }
+    });
+  }
 
   /**
    * Fetch news from multiple sources, optionally filtered by category
@@ -79,56 +80,142 @@ export class NewsAggregator {
   async fetchNews(category?: MarketCategory): Promise<NewsItem[]> {
     const allNews: NewsItem[] = [];
 
-    // In production, this would fetch from actual RSS feeds
-    // For now, returning mock structure
     try {
-      if (!category || category === "politics" || category === "crypto") {
-        // SEC News (relevant for politics and crypto)
-        const secNews = await this.fetchSECNews();
-        allNews.push(...secNews);
+      // Determine which categories to fetch
+      const categoriesToFetch: MarketCategory[] = category 
+        ? [category]
+        : ["politics", "crypto", "sports", "economics", "entertainment", "technology"];
 
-        // Financial News
-        const finNews = await this.fetchFinancialNews();
-        allNews.push(...finNews);
+      // Fetch from RSS feeds for each category
+      for (const cat of categoriesToFetch) {
+        const feeds = this.RSS_SOURCES[cat] || [];
+        for (const feedUrl of feeds) {
+          try {
+            const items = await this.fetchRSSFeed(feedUrl, cat);
+            allNews.push(...items);
+          } catch (error) {
+            console.error(`Failed to fetch ${feedUrl}:`, error instanceof Error ? error.message : error);
+          }
+        }
       }
 
-      if (!category || category === "sports") {
-        const sportsNews = await this.fetchSportsNews();
-        allNews.push(...sportsNews);
-      }
-
-      if (!category || category === "economics") {
-        const economicNews = await this.fetchEconomicNews();
-        allNews.push(...economicNews);
-      }
-
-      if (!category || category === "entertainment") {
-        const entertainmentNews = await this.fetchEntertainmentNews();
-        allNews.push(...entertainmentNews);
-      }
-
-      if (!category || category === "weather") {
-        const weatherNews = await this.fetchWeatherNews();
-        allNews.push(...weatherNews);
-      }
-
-      if (!category || category === "technology") {
-        const techNews = await this.fetchTechnologyNews();
-        allNews.push(...techNews);
-      }
-
-      if (!category || category === "world") {
-        const worldNews = await this.fetchWorldNews();
-        allNews.push(...worldNews);
+      // In simulation mode, also add mock data for testing
+      if (process.env.SIMULATION_DATA === "true") {
+        allNews.push(...this.getSimulationData(category));
       }
 
     } catch (error) {
       console.error("Failed to fetch news:", error);
     }
 
-    return allNews.sort((a, b) => 
+    // Remove duplicates and sort by date
+    const uniqueNews = this.deduplicateNews(allNews);
+    return uniqueNews.sort((a, b) => 
       b.published_at.getTime() - a.published_at.getTime()
     );
+  }
+
+  /**
+   * Fetch and parse an RSS feed
+   */
+  private async fetchRSSFeed(url: string, category: MarketCategory): Promise<NewsItem[]> {
+    // Rate limiting - don't fetch same source too frequently
+    const lastFetch = this.lastFetchTime.get(url) || 0;
+    const now = Date.now();
+    if (now - lastFetch < this.minFetchInterval) {
+      console.log(`Skipping ${url} - fetched recently`);
+      return [];
+    }
+
+    console.log(`Fetching RSS feed: ${url}`);
+    const feed = await this.parser.parseURL(url);
+    this.lastFetchTime.set(url, now);
+
+    const items: NewsItem[] = [];
+    const maxItems = 10; // Limit items per feed
+
+    for (const item of feed.items.slice(0, maxItems)) {
+      if (!item.title) continue;
+
+      const content = item.content || item.summary || item.contentSnippet || "";
+      const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
+
+      items.push({
+        source: new URL(url).hostname,
+        title: item.title,
+        content: content,
+        url: item.link || url,
+        published_at: pubDate,
+        relevance_score: 0.7, // Default, will be adjusted by keyword matching
+        category,
+      });
+    }
+
+    return items;
+  }
+
+  /**
+   * Deduplicate news items by title similarity
+   */
+  private deduplicateNews(items: NewsItem[]): NewsItem[] {
+    const seen = new Set<string>();
+    const unique: NewsItem[] = [];
+
+    for (const item of items) {
+      // Create a normalized key from title
+      const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 50);
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(item);
+      }
+    }
+
+    return unique;
+  }
+
+  /**
+   * Get simulation data for testing
+   */
+  private getSimulationData(category?: MarketCategory): NewsItem[] {
+    const simData: NewsItem[] = [];
+
+    if (!category || category === "crypto") {
+      simData.push({
+        source: "sec.gov",
+        title: "SEC Approves New Bitcoin ETF Applications",
+        content: "The Securities and Exchange Commission has approved multiple spot Bitcoin ETF applications, marking a historic moment for cryptocurrency regulation.",
+        url: "https://sec.gov/news/press-release/2024-btc-etf",
+        published_at: new Date(),
+        relevance_score: 0.95,
+        category: "crypto",
+      });
+    }
+
+    if (!category || category === "politics") {
+      simData.push({
+        source: "sec.gov",
+        title: "SEC Issues Guidance on Election Market Regulations",
+        content: "New regulatory guidance clarifies rules for prediction markets during election season.",
+        url: "https://sec.gov/news/press-release/2024-election",
+        published_at: new Date(),
+        relevance_score: 0.8,
+        category: "politics",
+      });
+    }
+
+    if (!category || category === "sports") {
+      simData.push({
+        source: "espn.com",
+        title: "NBA Finals: Lakers Lead Series 3-1",
+        content: "The Los Angeles Lakers have taken a commanding 3-1 series lead in the NBA Finals after a dominant performance.",
+        url: "https://espn.com/nba/story/finals-2024",
+        published_at: new Date(),
+        relevance_score: 0.9,
+        category: "sports",
+      });
+    }
+
+    return simData;
   }
 
   /**
@@ -138,7 +225,13 @@ export class NewsAggregator {
     const signals: Signal[] = [];
 
     for (const item of news) {
-      const signal = this.analyzeNewsItem(item, marketKeywords);
+      // Update relevance score based on keyword matching
+      const relevanceScore = this.calculateRelevanceScore(item, marketKeywords);
+      if (relevanceScore < 0.3) {
+        continue; // Skip irrelevant news
+      }
+
+      const signal = this.analyzeNewsItem({ ...item, relevance_score: relevanceScore }, marketKeywords);
       if (signal) {
         signals.push(signal);
       }
@@ -148,129 +241,25 @@ export class NewsAggregator {
   }
 
   /**
-   * Fetch SEC announcements
+   * Calculate relevance score based on keyword matching
    */
-  private async fetchSECNews(): Promise<NewsItem[]> {
-    console.log("Fetching SEC news...");
-    
-    // In production, would parse RSS feed from sec.gov
-    // For simulation, return sample news items to trigger belief updates
-    if (process.env.SIMULATION_DATA === "true") {
-      return [
-        {
-          source: "sec.gov",
-          title: "SEC Approves New Bitcoin ETF Applications",
-          content: "The Securities and Exchange Commission has approved multiple spot Bitcoin ETF applications, marking a historic moment for cryptocurrency regulation.",
-          url: "https://sec.gov/news/press-release/2024-btc-etf",
-          published_at: new Date(),
-          relevance_score: 0.95,
-          category: "crypto",
-        },
-        {
-          source: "sec.gov",
-          title: "SEC Issues Guidance on Election Market Regulations",
-          content: "New regulatory guidance clarifies rules for prediction markets during election season.",
-          url: "https://sec.gov/news/press-release/2024-election",
-          published_at: new Date(),
-          relevance_score: 0.8,
-          category: "politics",
-        },
-      ];
+  private calculateRelevanceScore(item: NewsItem, keywords: string[]): number {
+    const lowerContent = `${item.title} ${item.content}`.toLowerCase();
+    let score = 0;
+
+    for (const keyword of keywords) {
+      const lowerKeyword = keyword.toLowerCase();
+      if (lowerContent.includes(lowerKeyword)) {
+        // Title matches are more important
+        if (item.title.toLowerCase().includes(lowerKeyword)) {
+          score += 0.3;
+        } else {
+          score += 0.15;
+        }
+      }
     }
-    
-    return [];
-  }
 
-  /**
-   * Fetch financial news
-   */
-  private async fetchFinancialNews(): Promise<NewsItem[]> {
-    // Mock implementation
-    console.log("Fetching financial news...");
-    return [];
-  }
-
-  /**
-   * Fetch sports news from ESPN, USA Today, etc.
-   */
-  private async fetchSportsNews(): Promise<NewsItem[]> {
-    console.log("Fetching sports news...");
-    
-    // For simulation, return sample sports news
-    if (process.env.SIMULATION_DATA === "true") {
-      return [
-        {
-          source: "espn.com",
-          title: "NBA Finals: Lakers Lead Series 3-1",
-          content: "The Los Angeles Lakers have taken a commanding 3-1 series lead in the NBA Finals after a dominant performance.",
-          url: "https://espn.com/nba/story/finals-2024",
-          published_at: new Date(),
-          relevance_score: 0.9,
-          category: "sports",
-        },
-        {
-          source: "official",
-          title: "NFL Playoff Bracket Announced",
-          content: "The official NFL playoff bracket has been released, with teams confirmed for the postseason.",
-          url: "https://nfl.com/playoffs/2024",
-          published_at: new Date(),
-          relevance_score: 0.85,
-          category: "sports",
-        },
-      ];
-    }
-    
-    return [];
-  }
-
-  /**
-   * Fetch economic indicators and news
-   */
-  private async fetchEconomicNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, use BEA API, Fed RSS, etc.
-    console.log("Fetching economic news...");
-    // Would fetch from BEA, Federal Reserve, BLS, Trading Economics
-    return [];
-  }
-
-  /**
-   * Fetch entertainment and awards news
-   */
-  private async fetchEntertainmentNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, parse Variety, THR, Deadline feeds
-    console.log("Fetching entertainment news...");
-    // Would fetch from Variety, Hollywood Reporter, Gold Derby
-    return [];
-  }
-
-  /**
-   * Fetch weather data and forecasts
-   */
-  private async fetchWeatherNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, use NWS API, NOAA
-    console.log("Fetching weather data...");
-    // Would fetch from National Weather Service API, AccuWeather
-    return [];
-  }
-
-  /**
-   * Fetch technology news and announcements
-   */
-  private async fetchTechnologyNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, parse tech news feeds
-    console.log("Fetching technology news...");
-    // Would fetch from TechCrunch, The Verge, company press releases
-    return [];
-  }
-
-  /**
-   * Fetch world news and geopolitical events
-   */
-  private async fetchWorldNews(): Promise<NewsItem[]> {
-    // Mock implementation - in production, parse Reuters, UN feeds
-    console.log("Fetching world news...");
-    // Would fetch from Reuters international, UN announcements
-    return [];
+    return Math.min(1.0, score);
   }
 
   /**
