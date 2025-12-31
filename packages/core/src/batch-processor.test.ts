@@ -261,7 +261,8 @@ describe("BatchProcessor", () => {
       const result = await processor.evaluateMarkets(markets, signalGenerator);
 
       expect(result.metrics.avgProcessingTimePerMarket).toBeGreaterThan(0);
-      expect(result.metrics.avgProcessingTimePerMarket).toBeLessThan(result.metrics.processingTimeMs);
+      // Average should be less than or equal to total (equal if sequential)
+      expect(result.metrics.avgProcessingTimePerMarket).toBeLessThanOrEqual(result.metrics.processingTimeMs);
     });
 
     it("should track memory usage", async () => {

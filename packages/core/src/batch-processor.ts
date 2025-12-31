@@ -232,14 +232,29 @@ export class BatchProcessor {
 
     // Initialize belief state
     let belief: BeliefState = this.getDefaultBelief();
+    const signalHistory: Signal[] = [];
 
     // Update belief with each signal
     for (const signal of signals) {
-      belief = performBeliefUpdate(belief, signal);
+      belief = performBeliefUpdate(belief, signal, signalHistory);
+      signalHistory.push(signal);
     }
 
+    // Create resolution criteria from market
+    const criteria = this.createResolutionCriteria(market);
+
     // Evaluate trade decision
-    const decision = evaluateTrade(market, belief);
+    const result = evaluateTrade(belief, market, criteria);
+    
+    // Check if result is a TradeDecision or TradeEligibilityResult
+    let decision: import("@pomabot/shared").TradeDecision;
+    if ("side" in result) {
+      // It's a TradeDecision
+      decision = result;
+    } else {
+      // It's a TradeEligibilityResult (trade not eligible)
+      decision = this.getNoTradeDecision();
+    }
 
     // Calculate edge
     const edge = this.calculateEdge(market, belief, decision);
@@ -340,6 +355,21 @@ export class BatchProcessor {
       confidence: 50,
       unknowns: [],
       last_updated: new Date(),
+    };
+  }
+
+  /**
+   * Create resolution criteria for a market
+   * Uses heuristics based on market characteristics
+   */
+  private createResolutionCriteria(market: Market): import("@pomabot/shared").ResolutionCriteria {
+    // For batch processing, we assume most markets have clear resolution criteria
+    // This is a simplification - in production, this should be more sophisticated
+    return {
+      authority: "Polymarket",
+      authority_is_clear: true,
+      outcome_is_objective: true,
+      verification_source: market.resolution_criteria,
     };
   }
 

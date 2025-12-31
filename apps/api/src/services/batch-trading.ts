@@ -13,14 +13,11 @@ import {
   type MarketEvaluation,
 } from "@pomabot/core";
 import type { Market, Signal } from "@pomabot/shared";
-import { TradingService } from "./trading.js";
 import { NewsAggregator } from "../connectors/news.js";
-import { RedditConnector } from "../connectors/reddit.js";
 
 export interface BatchTradingConfig {
   batchProcessor: Partial<BatchProcessorConfig>;
   positiveOutcome: Partial<PositiveOutcomeConfig>;
-  enableReddit: boolean;
   enableNews: boolean;
 }
 
@@ -31,14 +28,12 @@ export interface BatchTradingConfig {
 export class BatchTradingService {
   private batchProcessor: BatchProcessor;
   private newsAggregator: NewsAggregator;
-  private redditConnector?: RedditConnector;
   private config: BatchTradingConfig;
 
   constructor(config: Partial<BatchTradingConfig> = {}) {
     this.config = {
       batchProcessor: config.batchProcessor || {},
       positiveOutcome: config.positiveOutcome || {},
-      enableReddit: config.enableReddit ?? false,
       enableNews: config.enableNews ?? true,
     };
 
@@ -48,22 +43,6 @@ export class BatchTradingService {
     );
 
     this.newsAggregator = new NewsAggregator();
-
-    // Initialize Reddit if enabled
-    if (this.config.enableReddit) {
-      const clientId = process.env.REDDIT_CLIENT_ID;
-      const clientSecret = process.env.REDDIT_CLIENT_SECRET;
-      
-      if (clientId && clientSecret) {
-        this.redditConnector = new RedditConnector({
-          clientId,
-          clientSecret,
-          userAgent: process.env.REDDIT_USER_AGENT ?? "pomabot/1.0",
-          username: process.env.REDDIT_USERNAME,
-          password: process.env.REDDIT_PASSWORD,
-        });
-      }
-    }
   }
 
   /**
@@ -87,19 +66,6 @@ export class BatchTradingService {
           signals.push(...newsSignals);
         } catch (error) {
           console.error(`Failed to fetch news signals for ${market.id}:`, error);
-        }
-      }
-
-      // Fetch Reddit signals if enabled
-      if (this.redditConnector && this.config.enableReddit) {
-        try {
-          const redditSignals = await this.redditConnector.getSignalsForMarket(
-            market.category,
-            keywords
-          );
-          signals.push(...redditSignals);
-        } catch (error) {
-          console.error(`Failed to fetch Reddit signals for ${market.id}:`, error);
         }
       }
 
