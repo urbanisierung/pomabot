@@ -102,13 +102,31 @@ async function main() {
       return;
     }
 
+    // Phase 9: Batch processing endpoints
+    if (req.url === "/api/batch/config") {
+      const config = {
+        batchMode: process.env.BATCH_MODE_ENABLED === "true",
+        maxConcurrency: parseInt(process.env.BATCH_MAX_CONCURRENCY || "50", 10),
+        batchSize: parseInt(process.env.BATCH_SIZE || "100", 10),
+        timeoutMs: parseInt(process.env.BATCH_TIMEOUT_MS || "5000", 10),
+        minEdge: parseInt(process.env.BATCH_MIN_EDGE || "15", 10),
+        maxPortfolioRisk: parseInt(process.env.BATCH_MAX_PORTFOLIO_RISK || "20", 10),
+        diversificationRequired: process.env.BATCH_REQUIRE_DIVERSIFICATION !== "false",
+        stopLossPercent: parseInt(process.env.BATCH_STOP_LOSS_PERCENT || "5", 10),
+        profitTargetPercent: parseInt(process.env.BATCH_PROFIT_TARGET_PERCENT || "10", 10),
+      };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(config));
+      return;
+    }
+
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
   });
 
   server.listen(HTTP_PORT, () => {
     console.log(`🌐 HTTP API server running on http://localhost:${HTTP_PORT}`);
-    console.log(`   Endpoints: /api/status, /api/markets, /api/health, /api/performance, /api/trade-history, /api/portfolio`);
+    console.log(`   Endpoints: /api/status, /api/markets, /api/health, /api/performance, /api/trade-history, /api/portfolio, /api/batch/config`);
   });
 
   // Log status every 5 minutes
