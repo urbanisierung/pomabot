@@ -36,6 +36,7 @@ export class NewsAggregator {
   private readonly RSS_SOURCES: Record<MarketCategory, string[]> = {
     politics: [
       "https://www.sec.gov/news/pressreleases.rss",
+      "https://feeds.apnews.com/rss/APPolitics",
     ],
     crypto: [
       "https://www.sec.gov/news/pressreleases.rss", // Crypto regulation
@@ -44,10 +45,12 @@ export class NewsAggregator {
     ],
     sports: [
       "https://www.espn.com/espn/rss/news",
+      "https://feeds.bbci.co.uk/sport/rss.xml",
     ],
     economics: [
       "https://www.federalreserve.gov/feeds/press_all.xml",
       "https://www.reuters.com/rssFeed/businessNews",
+      "https://feeds.content.dowjones.io/public/rss/mw_topstories",
     ],
     entertainment: [
       "https://variety.com/feed/",
@@ -60,10 +63,13 @@ export class NewsAggregator {
     technology: [
       "https://techcrunch.com/feed/",
       "https://www.theverge.com/rss/index.xml",
+      "https://feeds.arstechnica.com/arstechnica/index",
     ],
     world: [
       "https://www.reuters.com/rssFeed/worldNews",
       "https://www.un.org/en/rss.xml",
+      "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "https://www.aljazeera.com/xml/rss/all.xml",
     ],
     other: [],
   };

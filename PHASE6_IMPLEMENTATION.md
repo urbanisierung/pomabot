@@ -12,13 +12,13 @@ The NewsAggregator fetches news from curated RSS feeds organized by market categ
 
 | Category | Sources |
 |----------|---------|
-| **Politics** | SEC press releases |
+| **Politics** | SEC press releases, Associated Press |
 | **Crypto** | SEC, CoinTelegraph, CoinDesk |
-| **Sports** | ESPN |
-| **Economics** | Federal Reserve, Reuters Business |
+| **Sports** | ESPN, BBC Sport |
+| **Economics** | Federal Reserve, Reuters Business, MarketWatch |
 | **Entertainment** | Variety, Hollywood Reporter, Deadline |
-| **Technology** | TechCrunch, The Verge |
-| **World** | Reuters World, UN |
+| **Technology** | TechCrunch, The Verge, Ars Technica |
+| **World** | Reuters World, UN, BBC World, Al Jazeera |
 | **Weather** | NOAA |
 
 ### Signal Generation
@@ -121,18 +121,24 @@ This enables mock news items for each category, allowing you to test signal gene
 All feeds are free, publicly available, and require no API keys:
 
 - **SEC Press Releases**: `https://www.sec.gov/news/pressreleases.rss`
+- **Associated Press Politics**: `https://feeds.apnews.com/rss/APPolitics`
 - **CoinTelegraph**: `https://cointelegraph.com/rss`
 - **CoinDesk**: `https://www.coindesk.com/arc/outboundfeeds/rss/`
 - **ESPN**: `https://www.espn.com/espn/rss/news`
+- **BBC Sport**: `https://feeds.bbci.co.uk/sport/rss.xml`
 - **Federal Reserve**: `https://www.federalreserve.gov/feeds/press_all.xml`
 - **Reuters Business**: `https://www.reuters.com/rssFeed/businessNews`
+- **MarketWatch**: `https://feeds.content.dowjones.io/public/rss/mw_topstories`
 - **Reuters World**: `https://www.reuters.com/rssFeed/worldNews`
 - **Variety**: `https://variety.com/feed/`
 - **Hollywood Reporter**: `https://www.hollywoodreporter.com/feed/`
 - **Deadline**: `https://deadline.com/feed/`
 - **TechCrunch**: `https://techcrunch.com/feed/`
 - **The Verge**: `https://www.theverge.com/rss/index.xml`
+- **Ars Technica**: `https://feeds.arstechnica.com/arstechnica/index`
 - **UN**: `https://www.un.org/en/rss.xml`
+- **BBC World**: `https://feeds.bbci.co.uk/news/world/rss.xml`
+- **Al Jazeera**: `https://www.aljazeera.com/xml/rss/all.xml`
 - **NOAA**: `https://www.noaa.gov/rss`
 
 ### Adding New Feeds

@@ -476,13 +476,13 @@ Phase 6 implements comprehensive news integration through RSS feeds, providing t
 
 | Market Category | Sources |
 |-----------------|---------|
-| Politics | SEC press releases |
+| Politics | SEC press releases, Associated Press |
 | Crypto | SEC, CoinTelegraph, CoinDesk |
-| Sports | ESPN |
-| Economics | Federal Reserve, Reuters Business |
+| Sports | ESPN, BBC Sport |
+| Economics | Federal Reserve, Reuters Business, MarketWatch |
 | Entertainment | Variety, Hollywood Reporter, Deadline |
-| Technology | TechCrunch, The Verge |
-| World | Reuters World, UN |
+| Technology | TechCrunch, The Verge, Ars Technica |
+| World | Reuters World, UN, BBC World, Al Jazeera |
 | Weather | NOAA |
 
 #### 6.2 Signal Generation from News ✅
