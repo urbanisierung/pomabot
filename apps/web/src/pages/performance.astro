@@ -1,0 +1,16 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PerformanceDashboard from '../components/PerformanceDashboard';
+---
+
+<Layout title="Polymarket AI - Performance">
+  <div style="padding: 2rem;">
+    <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 1rem;">
+      📈 Trading Performance
+    </h1>
+    <p style="color: #6b7280; margin-bottom: 2rem;">
+      Historical performance metrics, P&L tracking, and trade journal
+    </p>
+    <PerformanceDashboard client:load />
+  </div>
+</Layout>
