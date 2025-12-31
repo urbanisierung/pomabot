@@ -24,6 +24,7 @@ import {
 import type { BeliefState, Signal, Market, TradeDecision } from "@pomabot/shared";
 import { PolymarketConnector } from "../connectors/polymarket.js";
 import { NewsAggregator } from "../connectors/news.js";
+import { RedditConnector } from "../connectors/reddit.js";
 import { WalletManager } from "../connectors/wallet.js";
 
 export interface MarketState {
@@ -36,6 +37,7 @@ export interface MarketState {
 export class TradingService {
   private polymarket: PolymarketConnector;
   private news: NewsAggregator;
+  private reddit?: RedditConnector;
   private stateMachine: StateMachine;
   private execution: ExecutionLayer;
   private safetyControls: SafetyControls;
@@ -43,6 +45,7 @@ export class TradingService {
   private auditLogger: AuditLogger;
   private wallet?: WalletManager;
   private simulationMode: boolean;
+  private redditEnabled: boolean;
   
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
@@ -84,6 +87,26 @@ export class TradingService {
       process.env.AUDIT_LOG_PATH ?? "./audit-logs"
     );
 
+    // Initialize Reddit connector if credentials provided
+    const redditClientId = process.env.REDDIT_CLIENT_ID;
+    const redditClientSecret = process.env.REDDIT_CLIENT_SECRET;
+    const redditUserAgent = process.env.REDDIT_USER_AGENT ?? "pomabot/1.0";
+    
+    if (redditClientId && redditClientSecret) {
+      this.reddit = new RedditConnector({
+        clientId: redditClientId,
+        clientSecret: redditClientSecret,
+        userAgent: redditUserAgent,
+        username: process.env.REDDIT_USERNAME,
+        password: process.env.REDDIT_PASSWORD,
+      });
+      this.redditEnabled = true;
+      console.log("📱 Reddit integration ENABLED");
+    } else {
+      this.redditEnabled = false;
+      console.log("📱 Reddit integration DISABLED (no credentials)");
+    }
+
     // Initialize execution layer with connector
     this.execution = new ExecutionLayer(
       this.polymarket,
@@ -110,6 +133,7 @@ export class TradingService {
     console.log(`   Mode: ${mode}`);
     console.log(`   Verbose: ${process.env.VERBOSE === "true" ? "ON" : "OFF"}`);
     console.log(`   Slack notifications: ${this.notifier.isEnabled() ? "ON" : "OFF"}`);
+    console.log(`   Reddit integration: ${this.redditEnabled ? "ON" : "OFF"}`);
     
     // Authenticate with CLOB if in live mode
     if (!this.simulationMode && this.wallet) {
@@ -123,6 +147,19 @@ export class TradingService {
         this.execution = new ExecutionLayer(undefined, true);
       } else {
         console.log("✅ CLOB authentication successful - real trading enabled");
+      }
+    }
+    
+    // Authenticate with Reddit if enabled
+    if (this.redditEnabled && this.reddit) {
+      console.log("🔐 Authenticating with Reddit API...");
+      const authenticated = await this.reddit.authenticate();
+      
+      if (!authenticated) {
+        console.warn("⚠️ Failed to authenticate with Reddit - disabling Reddit integration");
+        this.redditEnabled = false;
+      } else {
+        console.log("✅ Reddit authentication successful");
       }
     }
     
@@ -253,7 +290,46 @@ export class TradingService {
       const keywords = this.extractKeywords(state.market.question);
 
       // Generate signals from news
-      const signals = await this.news.generateSignals(news, keywords);
+      const newsSignals = await this.news.generateSignals(news, keywords);
+      
+      // Generate signals from Reddit if enabled
+      const redditSignals: Signal[] = [];
+      if (this.redditEnabled && this.reddit) {
+        try {
+          const redditPosts = await this.reddit.searchForMarket(
+            state.market.category,
+            keywords
+          );
+          
+          if (redditPosts.length > 0) {
+            const redditSignal = this.reddit.generateSignal(redditPosts, keywords);
+            
+            if (redditSignal) {
+              const beliefSignal = this.reddit.convertToBeliefSignal(
+                redditSignal,
+                state.market.category
+              );
+              redditSignals.push(beliefSignal);
+              
+              if (process.env.VERBOSE === "true") {
+                console.log(`📱 Reddit signal for ${state.market.question}:`, {
+                  subreddit: redditSignal.subreddit,
+                  sentiment: redditSignal.sentiment.toFixed(2),
+                  volume: redditSignal.volume,
+                  type: beliefSignal.type,
+                  direction: beliefSignal.direction,
+                  strength: beliefSignal.strength,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to fetch Reddit signals:", error);
+        }
+      }
+      
+      // Combine all signals
+      const signals = [...newsSignals, ...redditSignals];
 
       // Skip state machine transitions for markets without signals (optimization)
       if (signals.length === 0) {
