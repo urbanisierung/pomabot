@@ -2,6 +2,8 @@
 
 An autonomous trading system for Polymarket that uses deterministic belief-based decision making with real-time market and news integration.
 
+> **📚 [Complete Documentation](DOCUMENTATION.md)** - Comprehensive guide covering all features, setup, and troubleshooting
+
 ## Overview
 
 This system implements a conservative, truth-first approach to prediction market trading:
