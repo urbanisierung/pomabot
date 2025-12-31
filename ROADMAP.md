@@ -675,7 +675,7 @@ GET /api/trade-history    # Historical trade records
 GET /api/portfolio        # Current portfolio status
 ```
 
-### Future Enhancements (Phase 8+)
+### Future Enhancements (Phase 9+)
 
 The following features are planned for future phases:
 - [ ] Advanced ML for price prediction
@@ -684,6 +684,160 @@ The following features are planned for future phases:
 - [ ] Advanced charting with time series visualization
 - [ ] Strategy optimization using genetic algorithms
 - [ ] Multi-timeframe analysis
+
+---
+
+## Phase 8: Comprehensive Documentation 📚
+
+**Status:** 🔲 Not Started  
+**Duration:** 1 week
+**Priority:** HIGH - Essential for onboarding and deployment
+
+### Goals
+- Create a single, comprehensive documentation file covering all features
+- Provide clear setup instructions for all credentials and API keys
+- Include step-by-step deployment guide for Fly.io
+- Document simulation mode and all configuration options
+
+### Milestones
+
+#### 8.1 Feature Overview Documentation
+- [ ] Complete feature inventory with descriptions
+- [ ] Clear labeling of optional vs mandatory features
+- [ ] Configuration reference for each feature
+- [ ] Feature dependencies and relationships
+
+**Content to cover:**
+| Feature | Mandatory | Configuration |
+|---------|-----------|---------------|
+| Core Trading Engine | ✅ Yes | Base functionality |
+| Simulation Mode | ✅ Yes | Default mode |
+| Live Trading | ❌ Optional | Requires wallet |
+| Slack Notifications | ❌ Optional | Requires webhook |
+| Reddit Integration | ❌ Optional | Requires API keys |
+| News RSS Feeds | ✅ Yes | Built-in, no config |
+| Audit Logging | ✅ Yes | Built-in |
+| External Logging | ❌ Optional | Requires Logtail |
+| Web Dashboard | ✅ Yes | Auto-enabled |
+
+#### 8.2 Credential & API Key Setup Guide
+- [ ] Wallet setup (private key generation, security best practices)
+- [ ] Polymarket token allowances walkthrough
+- [ ] Slack webhook creation (step-by-step with screenshots description)
+- [ ] Reddit app registration process
+- [ ] Logtail account setup (optional)
+- [ ] Fly.io account and CLI setup
+
+**Wallet Setup Instructions:**
+```markdown
+1. Create new wallet or use existing Polygon wallet
+2. Export private key securely
+3. Set WALLET_PRIVATE_KEY environment variable
+4. Approve token allowances on Polymarket interface
+5. Verify wallet has USDC on Polygon network
+```
+
+**Reddit API Setup Instructions:**
+```markdown
+1. Go to https://www.reddit.com/prefs/apps
+2. Click "Create App" or "Create Another App"
+3. Select "script" as the app type
+4. Fill in name and redirect URI (http://localhost)
+5. Copy Client ID and Client Secret
+6. Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET
+```
+
+**Slack Webhook Setup Instructions:**
+```markdown
+1. Go to https://api.slack.com/apps
+2. Create new app "From scratch"
+3. Enable Incoming Webhooks
+4. Add new webhook to workspace
+5. Choose channel for notifications
+6. Copy webhook URL
+7. Set SLACK_WEBHOOK_URL environment variable
+```
+
+#### 8.3 Quickstart Guide
+- [ ] Prerequisites (Node.js, pnpm, Fly CLI)
+- [ ] Clone and install steps
+- [ ] Local development quickstart (simulation mode)
+- [ ] Fly.io deployment quickstart
+- [ ] Verification steps for each mode
+
+**Local Simulation Quickstart:**
+```bash
+# 1. Clone and install
+git clone <repo>
+cd pomabot
+pnpm install
+
+# 2. Build packages
+pnpm build
+
+# 3. Run in simulation mode (no config needed)
+pnpm --filter @pomabot/api dev
+
+# 4. View dashboard
+open http://localhost:3000
+```
+
+**Fly.io Deployment Quickstart:**
+```bash
+# 1. Install Fly CLI
+curl -L https://fly.io/install.sh | sh
+
+# 2. Authenticate
+fly auth login
+
+# 3. Deploy (first time)
+fly launch
+
+# 4. Set secrets for live trading
+fly secrets set WALLET_PRIVATE_KEY=<key>
+fly secrets set SLACK_WEBHOOK_URL=<url>
+
+# 5. Deploy
+fly deploy
+
+# 6. View logs
+fly logs
+```
+
+#### 8.4 Configuration Reference
+- [ ] Complete environment variables table
+- [ ] Default values and valid ranges
+- [ ] Example configurations (simulation, live, full-featured)
+- [ ] Troubleshooting common configuration issues
+
+### Deliverable
+
+A single markdown file: **`DOCUMENTATION.md`** in the project root containing:
+
+1. **Overview** - What is PomaBot and what can it do
+2. **Features** - Complete feature list with mandatory/optional labels
+3. **Prerequisites** - Required software and accounts
+4. **Configuration Reference** - All environment variables with descriptions
+5. **Credential Setup** - How to obtain each API key/credential
+6. **Quickstart Guides**
+   - Local Development (Simulation Mode)
+   - Local Development (Live Trading)
+   - Fly.io Deployment
+7. **Verification** - How to verify each feature is working
+8. **Troubleshooting** - Common issues and solutions
+
+### Action Items
+- [ ] Create `DOCUMENTATION.md` file structure
+- [ ] Write feature overview section
+- [ ] Document all environment variables
+- [ ] Create wallet/private key setup guide
+- [ ] Create Reddit API setup guide
+- [ ] Create Slack webhook setup guide
+- [ ] Write local simulation quickstart
+- [ ] Write Fly.io deployment quickstart
+- [ ] Add verification steps for each feature
+- [ ] Include troubleshooting section
+- [ ] Review and test all instructions
 
 ---
 
@@ -772,6 +926,7 @@ Before enabling live trading:
 | 5 | Reddit Data Integration | 2-3 weeks | ✅ Complete |
 | 6 | Additional Data Sources (News RSS) | 1 week | ✅ Complete |
 | 7 | Advanced Features (Analysis & Portfolio) | 1-2 weeks | ✅ Complete |
+| 8 | Comprehensive Documentation | 1 week | 🔲 Not Started |
 
 ---
 
