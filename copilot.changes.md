@@ -1,5 +1,141 @@
 # Copilot Changes
 
+## 2026-01-01: Added Phase 10 - Reddit Data Access Alternatives to ROADMAP.md
+
+### Summary
+Added a comprehensive new Phase 10 to the ROADMAP.md file to address the challenge of obtaining Reddit API credentials and explore alternative approaches for gathering social sentiment data.
+
+### Context
+The current Reddit integration (Phase 5) relies on Reddit API credentials (client ID and secret) that are increasingly difficult to obtain due to Reddit's restrictive approval process. This phase researches and documents viable alternatives to maintain social sentiment analysis capabilities.
+
+### Files Modified
+
+**[ROADMAP.md](ROADMAP.md)**
+- Added new "Phase 10: Reddit Data Access Alternatives 🔄" section after Phase 9
+- Status: 🔬 Research
+- Duration: 2-3 weeks
+- Priority: MEDIUM - Addresses Reddit API access challenges
+
+### Key Content Added
+
+**Context Section:**
+- Documents the problem: Reddit API credentials are blocked without approval
+- Existing credentials may be revoked
+- Need to find alternative approaches while respecting terms of service
+
+**Goals:**
+- Research viable alternatives to traditional Reddit API access
+- Explore Reddit's Devvit platform as potential solution
+- Investigate compliant approaches (no ToS violations)
+- Research alternative platforms similar to Reddit
+- Provide implementation roadmap for chosen approach
+
+**Milestones:**
+
+1. **Reddit Access Alternatives Research (10.1)**
+   - Option A: Reddit Devvit Platform (research server-side capabilities)
+   - Option B: Official Pushshift Alternatives (Reddit archives, Pullpush.io)
+   - Option C: Compliant Scraping (explicitly noted as NOT recommended due to ToS)
+   - Option D: Community-Provided Data (RSS feeds from Reddit subreddits)
+
+2. **Alternative Platform Research (10.2)**
+   - Hacker News (Algolia API - no auth required, excellent for tech/crypto)
+   - X/Twitter (Essential vs Elevated tiers, rate limit analysis)
+   - Mastodon (federated, open API)
+   - Discord (public servers, bot tokens)
+   - Telegram (public channels)
+   - Stack Exchange (300 req/day anonymous, tech markets)
+   - News Aggregators (Techmeme, Memeorandum)
+
+3. **Implementation Recommendation (10.3)**
+   - Compare approaches with pros/cons matrix
+   - Recommend primary and fallback approaches
+   - Document implementation complexity
+   - Estimate development time
+
+4. **Proof of Concept (10.4)**
+   - Build minimal PoC for recommended approach
+   - Test integration with existing system
+   - Measure signal quality vs current Reddit integration
+
+**Research Findings Section:**
+- Devvit: Official Reddit platform but unclear if viable for external pipelines
+- RSS Feeds: Simple, free, respects ToS, but limited (25 posts, no comments)
+- Web Scraping: Explicitly marked as NOT recommended (violates ToS)
+- Hacker News: Excellent official API, perfect for tech/crypto markets
+- Twitter/X: Limited Essential tier, Elevated requires approval (same problem)
+
+**Implementation Details:**
+- TypeScript interfaces for RedditRSSFetcher
+- TypeScript interfaces for HackerNewsConnector
+- Example code structure for both approaches
+
+**Action Items:**
+- Research phase tasks (Devvit app, RSS testing, HN prototype)
+- Implementation phase tasks (after decision)
+- Migration phase tasks (backward compatibility)
+
+**Environment Configuration:**
+- `REDDIT_RSS_ENABLED`, `REDDIT_RSS_POLL_INTERVAL`, `REDDIT_RSS_USER_AGENT`
+- `HACKERNEWS_ENABLED`, `HACKERNEWS_API_URL`, `HACKERNEWS_SEARCH_WINDOW`
+- `TWITTER_ENABLED`, `TWITTER_API_KEY`, `TWITTER_BEARER_TOKEN`
+- `MASTODON_ENABLED`, `MASTODON_INSTANCE`, `MASTODON_ACCESS_TOKEN`
+- Fallback: Keep existing Reddit API variables as optional
+
+**Decision Matrix:**
+Comprehensive comparison table with recommendations:
+- ⭐ Primary: Reddit RSS (simple, free, respects ToS)
+- ⭐ Primary (supplement): Hacker News (excellent API, rich data)
+- 🔬 Research: Reddit Devvit (needs investigation)
+- ❌ Not viable: Twitter Elevated, Web Scraping
+- 🤔 Consider: Mastodon
+
+**Success Criteria:**
+- Identify at least 2 viable alternatives
+- Document implementation complexity
+- Create working prototype
+- Achieve comparable signal quality
+- Ensure ToS compliance
+- Provide clear migration path
+
+**Future Considerations:**
+- Multi-source aggregation (RSS + HN + Mastodon)
+- Signal fusion with weighted reliability
+- Adaptive sourcing based on availability
+- Self-hosted Lemmy instances
+
+### Timeline Update
+- Updated Timeline Summary table to include Phase 10
+- Status: 🔬 Research
+- Reflects completion of Phases 1-8, Phase 9 in progress
+
+### Date Update
+- Updated "Last updated" from December 31, 2025 to January 1, 2026
+
+### Reasoning
+
+This phase is essential for the long-term viability of PomaBot's social sentiment analysis:
+
+1. **Addresses Real Problem**: Reddit API access is genuinely difficult to obtain
+2. **Explores Multiple Alternatives**: Not limited to single solution
+3. **Respects Terms of Service**: Explicitly discourages ToS violations
+4. **Documents Trade-offs**: Clear pros/cons for each approach
+5. **Provides Implementation Path**: Not just research, but actionable next steps
+6. **Considers Similar Platforms**: Hacker News, Mastodon, etc. for diversification
+7. **Backward Compatible**: Keeps existing Reddit API as optional fallback
+
+### Next Steps (Implementation)
+
+When this phase moves from Research to Implementation:
+1. Test Reddit RSS feeds for multiple subreddits
+2. Build Hacker News API integration prototype  
+3. Evaluate Devvit capabilities with test app
+4. Compare signal quality across sources
+5. Implement chosen approach with comprehensive tests
+6. Update documentation and migration guide
+
+---
+
 ## 2026-01-01: Added MetaMask Wallet Creation Guide to Documentation
 
 ### Summary

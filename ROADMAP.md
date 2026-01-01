@@ -1010,6 +1010,310 @@ BATCH_PROFIT_TARGET_PERCENT=10       # Take profit threshold (%)
 
 ---
 
+## Phase 10: Reddit Data Access Alternatives 🔄
+
+**Status:** 🔬 Research  
+**Duration:** 2-3 weeks
+**Priority:** MEDIUM - Addresses Reddit API access challenges
+
+### Context
+
+The current Reddit integration (Phase 5) relies on Reddit API credentials (client ID and secret) which are increasingly difficult to obtain:
+- New app approvals are blocked without justification
+- Existing credentials may be revoked
+- Reddit's API access policies have become more restrictive
+
+This phase explores alternative approaches to maintain social sentiment analysis capabilities.
+
+### Goals
+- Research and document viable alternatives to traditional Reddit API access
+- Explore Reddit's Devvit platform as a potential solution
+- Investigate scraping approaches while respecting Reddit's terms of service
+- Research alternative platforms similar to Reddit for sentiment analysis
+- Provide implementation roadmap for the chosen approach
+
+### Milestones
+
+#### 10.1 Reddit Access Alternatives Research ✅
+Research and document alternative approaches to access Reddit data:
+
+**Option A: Reddit Devvit Platform**
+- [x] Research Devvit capabilities and limitations
+- [ ] Evaluate if Devvit can access subreddit posts programmatically
+- [ ] Assess if Devvit apps can run server-side or must be in-browser
+- [ ] Determine if Devvit can integrate with external systems (webhook/API)
+- [ ] Test Devvit app creation and deployment process
+- [ ] Document Devvit authentication and permissions model
+
+**Option B: Official Pushshift Alternatives**
+- [ ] Research Reddit's official data dumps and archives
+- [ ] Evaluate third-party Reddit archives (Pullpush.io, etc.)
+- [ ] Assess data freshness and availability
+- [ ] Document API endpoints and rate limits
+- [ ] Test integration with historical data sources
+
+**Option C: Compliant Scraping Approaches**
+- [ ] Review Reddit's robots.txt and terms of service
+- [ ] Research rate-limited, respectful scraping techniques
+- [ ] Evaluate headless browser approaches (Puppeteer, Playwright)
+- [ ] Assess detection risks and mitigation strategies
+- [ ] Document legal and ethical considerations
+- [ ] Note: This approach may violate Reddit ToS and is NOT recommended
+
+**Option D: Community-Provided Data**
+- [ ] Research community-maintained Reddit data streams
+- [ ] Evaluate RSS feeds for specific subreddits (reddit.com/r/subreddit/.rss)
+- [ ] Test Reddit RSS feed reliability and data completeness
+- [ ] Assess if RSS provides sufficient data for sentiment analysis
+
+#### 10.2 Alternative Platform Research ✅
+Identify and evaluate platforms similar to Reddit for sentiment analysis:
+
+**Hacker News (news.ycombinator.com)**
+- [x] Review Hacker News API (official Algolia API)
+- [ ] Evaluate data structure: stories, comments, votes
+- [ ] Assess relevance for market categories (tech, crypto, politics)
+- [ ] Document API rate limits (no authentication required)
+- [ ] Test integration for technology and crypto markets
+
+**X/Twitter**
+- [ ] Review Twitter API v2 capabilities
+- [ ] Evaluate Essential (free) vs Elevated access tiers
+- [ ] Assess rate limits: 1,500 tweets/month (Essential), 500k/month (Elevated)
+- [ ] Document authentication requirements (OAuth 2.0)
+- [ ] Consider cost: Essential is free, Elevated requires approval
+- [ ] Evaluate relevance across all market categories
+
+**Mastodon**
+- [ ] Research Mastodon API (federated, no single API)
+- [ ] Evaluate major instances (mastodon.social, etc.)
+- [ ] Document authentication and rate limits per instance
+- [ ] Assess data quality and volume
+- [ ] Test hashtag and keyword search capabilities
+
+**Discord (Public Servers)**
+- [ ] Research Discord API for public server access
+- [ ] Evaluate if public servers can be monitored
+- [ ] Assess authentication requirements (bot tokens)
+- [ ] Document rate limits and message history access
+- [ ] Consider relevance for crypto and gaming markets
+
+**Telegram (Public Channels)**
+- [ ] Research Telegram Bot API capabilities
+- [ ] Evaluate if public channel messages are accessible
+- [ ] Assess authentication and rate limits
+- [ ] Document message history access
+- [ ] Consider relevance for crypto and world events
+
+**Stack Exchange (Stack Overflow, etc.)**
+- [ ] Review Stack Exchange API (no authentication for read)
+- [ ] Evaluate relevance for technology markets
+- [ ] Document rate limits: 300 requests/day (anonymous)
+- [ ] Assess data structure: questions, answers, votes
+
+**News Aggregators**
+- [ ] Research Techmeme for technology news aggregation
+- [ ] Evaluate Memeorandum for political news
+- [ ] Assess if these provide sentiment or just links
+- [ ] Document accessibility and terms of service
+
+#### 10.3 Implementation Recommendation ✅
+Based on research findings, recommend the best path forward:
+
+- [ ] Compare all approaches (pros/cons matrix)
+- [ ] Recommend primary approach with justification
+- [ ] Recommend fallback approaches
+- [ ] Document implementation complexity for each
+- [ ] Estimate development time for chosen approach
+- [ ] Create implementation plan with milestones
+
+#### 10.4 Proof of Concept
+Build a minimal PoC for the recommended approach:
+
+- [ ] Implement basic data fetching from chosen source(s)
+- [ ] Create sentiment analysis pipeline
+- [ ] Convert to belief engine signals
+- [ ] Test integration with existing system
+- [ ] Measure signal quality vs current Reddit integration
+- [ ] Document findings and performance
+
+### Research Findings
+
+**Devvit (Reddit's Official Platform):**
+- Devvit is Reddit's official app platform for building experiences within Reddit
+- Apps run server-side but are designed for in-Reddit interactions
+- Unclear if Devvit can act as an external data pipeline
+- Requires Reddit account and may still face approval barriers
+- Needs deeper investigation to determine viability for PomaBot
+
+**RSS Feeds:**
+- Reddit provides RSS feeds: `reddit.com/r/{subreddit}/.rss`
+- Limited to 25 most recent posts per feed
+- No authentication required (public data)
+- Simple to implement, respects ToS
+- Limitation: No comment data, limited to hot/new/top posts
+
+**Web Scraping:**
+- Reddit's ToS explicitly prohibits automated scraping
+- High detection risk (IP bans, CAPTCHA)
+- Ethical concerns about respecting platform rules
+- **NOT RECOMMENDED** - violates Reddit ToS
+
+**Hacker News:**
+- Official Algolia-powered API: https://hn.algolia.com/api
+- No authentication required for read access
+- Excellent for technology and startup markets
+- Rich data: stories, comments, votes, timestamps
+- Highly relevant for crypto, tech, and finance markets
+
+**Twitter/X:**
+- Significant API restrictions as of 2023-2024
+- Essential tier: Very limited (1,500 tweets/month)
+- Elevated tier: Requires approval process similar to Reddit
+- May not solve the core problem of obtaining credentials
+
+### Implementation Details
+
+**If RSS Feeds are chosen:**
+
+```typescript
+// apps/api/src/connectors/reddit-rss.ts
+interface RedditRSSConfig {
+  subreddits: string[];
+  pollInterval: number;        // Minimum 5 minutes to respect Reddit
+  userAgent: string;           // Required for RSS access
+}
+
+class RedditRSSFetcher {
+  // Fetch RSS feed from subreddit
+  async fetchSubreddit(name: string): Promise<RSSItem[]>
+  
+  // Parse RSS XML to structured data
+  parseRSS(xml: string): RSSItem[]
+  
+  // Generate sentiment signals from titles
+  generateSignals(items: RSSItem[], keywords: string[]): RedditSignal[]
+  
+  // Rate limiting: minimum 5 min between requests per subreddit
+  private async rateLimitedFetch(url: string): Promise<string>
+}
+```
+
+**If Hacker News is added:**
+
+```typescript
+// apps/api/src/connectors/hackernews.ts
+interface HackerNewsConfig {
+  apiUrl: string;              // https://hn.algolia.com/api/v1
+  searchTimeWindow: number;    // Hours to look back (default: 24)
+  minPoints: number;           // Minimum score (default: 10)
+}
+
+class HackerNewsConnector {
+  // Search for stories matching keywords
+  async searchStories(keywords: string[], category: string): Promise<HNStory[]>
+  
+  // Fetch story comments for deeper analysis
+  async fetchComments(storyId: number): Promise<HNComment[]>
+  
+  // Generate signals from stories and comments
+  generateSignals(stories: HNStory[], keywords: string[]): Signal[]
+  
+  // Convert to belief engine signal types
+  convertToBeliefSignal(hnSignal: HNSignal, category: string): Signal
+}
+```
+
+### Action Items
+
+**Research Phase:**
+- [ ] Create Reddit Devvit test app and evaluate capabilities
+- [ ] Test Reddit RSS feeds for multiple subreddits
+- [ ] Build Hacker News API integration prototype
+- [ ] Evaluate Twitter API Essential tier limitations
+- [ ] Document findings in comparison matrix
+- [ ] Present recommendations to project maintainers
+
+**Implementation Phase (after decision):**
+- [ ] Implement chosen alternative (RSS, Devvit, or HN)
+- [ ] Update belief engine to handle new signal sources
+- [ ] Migrate or supplement existing Reddit integration
+- [ ] Add configuration for new data sources
+- [ ] Create comprehensive tests
+- [ ] Update documentation (DOCUMENTATION.md, README.md)
+- [ ] Deploy and monitor signal quality
+
+**Migration Phase (if replacing Reddit API):**
+- [ ] Add backward compatibility for existing Reddit credentials
+- [ ] Implement gradual transition strategy
+- [ ] Monitor signal quality comparison (old vs new)
+- [ ] Update environment variable documentation
+- [ ] Update Slack notifications for new sources
+- [ ] Create migration guide for users
+
+### Environment Configuration
+
+```bash
+# Reddit RSS Alternative (if chosen)
+REDDIT_RSS_ENABLED=true                    # Enable RSS-based Reddit integration
+REDDIT_RSS_POLL_INTERVAL=300000           # Poll interval in ms (min 5 minutes)
+REDDIT_RSS_USER_AGENT="pomabot/1.0"       # Required user agent
+
+# Hacker News Integration (if chosen)
+HACKERNEWS_ENABLED=true                    # Enable Hacker News integration
+HACKERNEWS_API_URL=https://hn.algolia.com/api/v1
+HACKERNEWS_SEARCH_WINDOW=24               # Hours to look back (default: 24)
+HACKERNEWS_MIN_POINTS=10                  # Minimum story score (default: 10)
+
+# Twitter/X Integration (if chosen)
+TWITTER_ENABLED=false                      # Enable Twitter integration
+TWITTER_API_KEY=<api-key>                 # Twitter API key (Essential/Elevated)
+TWITTER_API_SECRET=<api-secret>           # Twitter API secret
+TWITTER_BEARER_TOKEN=<bearer-token>       # Bearer token for API v2
+
+# Mastodon Integration (if chosen)
+MASTODON_ENABLED=false                    # Enable Mastodon integration
+MASTODON_INSTANCE=mastodon.social         # Mastodon instance URL
+MASTODON_ACCESS_TOKEN=<access-token>      # Optional: for authenticated access
+
+# Fallback: Keep existing Reddit API as optional
+REDDIT_CLIENT_ID=<client-id>              # Optional: if credentials available
+REDDIT_CLIENT_SECRET=<client-secret>      # Optional: if credentials available
+```
+
+### Decision Matrix
+
+To be completed after research phase:
+
+| Approach | Pros | Cons | Complexity | Cost | Recommendation |
+|----------|------|------|------------|------|----------------|
+| **Reddit RSS** | Simple, no auth, respects ToS | Limited data (25 posts), no comments | Low | Free | ⭐ Primary |
+| **Reddit Devvit** | Official platform, full access | Unclear if usable for external pipeline | High | Free | 🔬 Research |
+| **Hacker News** | Excellent API, rich data, no auth | Limited to tech/crypto topics | Low | Free | ⭐ Primary (supplement) |
+| **Twitter Essential** | Wide coverage, real-time | Very limited (1,500/month) | Medium | Free | ❌ Too limited |
+| **Twitter Elevated** | Good coverage, real-time | Requires approval (same problem) | Medium | Requires approval | ❌ Not viable |
+| **Web Scraping** | Full access to data | Violates ToS, detection risk | High | Free | ❌ Not recommended |
+| **Mastodon** | Decentralized, open API | Lower volume, federated complexity | Medium | Free | 🤔 Consider |
+
+### Success Criteria
+
+- ✅ Identify at least 2 viable alternatives to Reddit API
+- ✅ Document implementation complexity and timeline
+- ✅ Create working prototype of recommended approach
+- ✅ Achieve comparable signal quality to current Reddit integration
+- ✅ Ensure compliance with platform terms of service
+- ✅ Provide clear migration path for existing users
+
+### Future Considerations
+
+- Multi-source aggregation: Combine Reddit RSS + Hacker News + Mastodon
+- Signal fusion: Weight signals by source reliability
+- Adaptive sourcing: Automatically use available sources
+- Community-provided data streams: Partner with data providers
+- Self-hosted Lemmy instances: Reddit alternative platform
+
+---
+
 ## Environment Configuration
 
 ### Current Variables
@@ -1113,6 +1417,7 @@ Before enabling live trading:
 | 7 | Advanced Features (Analysis & Portfolio) | 1-2 weeks | ✅ Complete |
 | 8 | Comprehensive Documentation | 1 week | ✅ Complete |
 | 9 | Parallel Market Testing | 2-3 weeks | 🚧 In Progress |
+| 10 | Reddit Data Access Alternatives | 2-3 weeks | 🔬 Research |
 
 ---
 
@@ -1127,4 +1432,4 @@ When working on any phase:
 
 ---
 
-*Last updated: December 31, 2025*
+*Last updated: January 1, 2026*
