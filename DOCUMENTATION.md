@@ -308,6 +308,109 @@ console.log('Private Key:', wallet.privateKey);
 2. Ensure wallet has USDC on Polygon network
 3. Verify wallet address on PolygonScan
 
+**Option C: Create New Wallet with MetaMask**
+
+1. **Install MetaMask**
+   - Visit https://metamask.io/download/
+   - Install the browser extension for Chrome, Firefox, Brave, or Edge
+   - Click "Create a new wallet"
+   - Set a strong password and store it securely
+
+2. **Backup Your Seed Phrase**
+   - MetaMask will display a 12-word seed phrase
+   - Write it down on paper (never digitally)
+   - Store in a secure location (safe, safety deposit box)
+   - **CRITICAL**: Anyone with this phrase can access your funds
+
+3. **Add Polygon Network to MetaMask**
+   - Click the network dropdown (top left, shows "Ethereum Mainnet")
+   - Click "Add network" → "Add a network manually"
+   - Enter these details:
+     - **Network Name**: Polygon Mainnet
+     - **RPC URL**: `https://polygon-rpc.com`
+     - **Chain ID**: `137`
+     - **Currency Symbol**: `MATIC`
+     - **Block Explorer**: `https://polygonscan.com`
+   - Click "Save" and switch to Polygon network
+
+4. **Export Private Key for PomaBot**
+   - Click the three dots (⋮) next to your account name
+   - Select "Account details" → "Show private key"
+   - Enter your MetaMask password
+   - Copy the private key (remove `0x` prefix for PomaBot)
+   - **Store securely** - never share or commit to version control
+
+5. **Fund Your Wallet with USDC on Polygon**
+
+   **Method A: Buy USDC on Centralized Exchange + Bridge**
+   
+   1. Create account on a major exchange:
+      - **Coinbase**: https://www.coinbase.com (US-friendly)
+      - **Kraken**: https://www.kraken.com (global)
+      - **Binance**: https://www.binance.com (non-US)
+   2. Complete identity verification (KYC)
+   3. Deposit fiat currency (USD, EUR, etc.) via bank transfer or card
+   4. Buy USDC (stablecoin pegged to USD)
+   5. Withdraw USDC to your MetaMask wallet:
+      - Select "Withdraw" → "USDC"
+      - **IMPORTANT**: Choose **Polygon network** (not Ethereum!)
+      - Paste your MetaMask wallet address
+      - Confirm withdrawal
+   6. Wait 5-30 minutes for funds to arrive
+
+   **Method B: Buy MATIC + Swap on Polygon**
+   
+   1. Buy MATIC on an exchange (Coinbase, Kraken, Binance)
+   2. Withdraw MATIC to MetaMask on **Polygon network**
+   3. Use a DEX to swap MATIC for USDC:
+      - **Uniswap**: https://app.uniswap.org (select Polygon network)
+      - **QuickSwap**: https://quickswap.exchange
+      - **1inch**: https://app.1inch.io
+   4. Connect MetaMask, swap MATIC → USDC
+
+   **Method C: Use an On-Ramp Service (Card Payment)**
+   
+   1. Visit a fiat on-ramp that supports Polygon:
+      - **MoonPay**: https://www.moonpay.com
+      - **Transak**: https://transak.com
+      - **Ramp**: https://ramp.network
+   2. Select USDC on Polygon network
+   3. Enter your MetaMask wallet address
+   4. Pay with credit/debit card
+   5. USDC arrives directly in your wallet (higher fees, faster)
+
+   **Method D: Bridge from Ethereum (if you have USDC on ETH)**
+   
+   1. Visit the official Polygon Bridge: https://wallet.polygon.technology/bridge
+   2. Connect MetaMask
+   3. Select USDC, enter amount
+   4. Approve and confirm bridge transaction
+   5. Wait 20-30 minutes for bridging to complete
+   6. USDC will appear in your Polygon wallet
+
+6. **Get MATIC for Gas Fees**
+   - Polygon transactions require small MATIC amounts for gas (~$0.01 per tx)
+   - Options to get MATIC:
+     - Withdraw small amount from exchange (minimum ~$10)
+     - Use a faucet: https://faucet.polygon.technology (small free amounts)
+     - Some on-ramps include gas token with purchase
+
+7. **Verify Your Setup**
+   ```bash
+   # Check your wallet address and balance on PolygonScan
+   # Visit: https://polygonscan.com/address/YOUR_WALLET_ADDRESS
+   
+   # Verify MetaMask shows:
+   # - Network: Polygon Mainnet
+   # - USDC balance > 0
+   # - Small MATIC balance for gas
+   ```
+
+**Recommended Starting Amounts:**
+- **Testing**: $10-50 USDC + $1 MATIC for gas
+- **Small live trading**: $100-200 USDC + $5 MATIC
+- **Serious trading**: $500+ USDC + $10 MATIC
+
 **Security Best Practices:**
 
 - ✅ Use a dedicated wallet for trading (not your main wallet)
