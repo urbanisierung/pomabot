@@ -1,5 +1,67 @@
 # Copilot Changes
 
+## 2026-01-02: Fixed Build Error - TypeScript Compilation Issue
+
+### Summary
+Fixed TypeScript compilation error that prevented `pnpm run build` from succeeding. The issue was in `apps/api/src/services/trading.ts` where it was attempting to call a private method `log()` on the AuditLogger class.
+
+### Root Cause
+The code at line 822 of `trading.ts` was trying to call `this.auditLogger.log()` with multiple string parameters. However:
+1. The `log` method in the AuditLogger class is marked as `private`
+2. The `log` method signature expects an `AuditEntry` object, not multiple string parameters
+3. There was no public method to log paper trade resolution events
+
+### Changes Made
+
+**File:** [packages/core/src/audit-log.ts](packages/core/src/audit-log.ts)
+1. **Added new event type**: `PAPER_TRADE_RESOLVED` to the `AuditEventType` union type
+2. **Created new public method**: `logPaperTradeResolved()` with proper type-safe parameters:
+   - `marketId: string`
+   - `marketQuestion: string`
+   - `side: string`
+   - `outcome: string`
+   - `beliefRange: string`
+   - `edge: number`
+   - `sizeUsd: number`
+   - `pnl: number`
+3. The method internally calls the private `log()` method with a properly formatted `AuditEntry` object
+
+**File:** [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)
+1. **Updated the logging call** at line 822 to use the new `logPaperTradeResolved()` method
+2. **Removed unnecessary string conversions** - passing numeric values directly instead of converting to strings
+3. **Simplified parameter passing** - using position fields directly without template literals
+
+### Testing Results
+
+All verification checks passed:
+- ✅ **Build**: Successful (all packages compiled without errors)
+- ✅ **Type Check**: Passed (TypeScript compilation successful)
+- ✅ **Tests**: All 204 tests passed (120 in core, 84 in api)
+- ✅ **Lint**: No lint errors
+
+### Impact
+
+This fix enables:
+1. **Successful builds**: The monorepo can now be built without TypeScript errors
+2. **Paper trading audit logs**: Paper trade resolutions are now properly logged with all relevant information
+3. **Type safety**: The new method provides compile-time type checking for all parameters
+4. **Maintainability**: Clear separation between public API and internal implementation
+
+### Verification Commands
+
+```bash
+# Full verification (all checks must pass)
+pnpm verify
+
+# Individual commands
+pnpm run build   # ✅ Passes
+pnpm run check   # ✅ Passes
+pnpm run test    # ✅ Passes (204 tests)
+pnpm run lint    # ✅ Passes
+```
+
+---
+
 ## 2026-01-02: Implemented Phase 11 - Paper Trading & Prediction Validation
 
 ### Summary
