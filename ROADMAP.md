@@ -1230,6 +1230,364 @@ The new connectors can be integrated into TradingService alongside existing data
 
 ---
 
+## Phase 11: Paper Trading & Prediction Validation 📊
+
+**Status:** 📋 Planned  
+**Duration:** 2-3 weeks
+**Priority:** HIGH - Critical for validating trading strategy before live trading
+
+### Context
+
+The current simulation mode logs trade opportunities but **does not track whether predictions were correct**. This creates a critical gap:
+
+- **Current State**: System identifies "I would trade this" but never verifies if the prediction was correct
+- **Problem**: No way to validate if the trading strategy actually works
+- **Impact**: Cannot confidently transition from simulation to live trading
+
+From code analysis:
+- ExecutionLayer stores orders in memory Map but doesn't track outcomes
+- TradeHistoryAnalyzer loads from audit logs but relies on `POSITION_CLOSED` events that never occur in simulation
+- There's a TODO comment: "Track actual P&L when real trading enabled"
+
+### Goals
+- Track simulated positions until market resolution
+- Compare predicted beliefs vs actual market outcomes
+- Calculate hypothetical P&L for paper trades
+- Validate edge calculations and win rate
+- Build confidence before live trading
+
+### Milestones
+
+#### 11.1 Paper Trading Position Tracker
+- [ ] Create persistent position storage (not just in-memory)
+- [ ] Track entry: market ID, side, entry price, belief range, edge, timestamp
+- [ ] Store position state to disk (survive restarts)
+- [ ] Support position lifecycle: OPEN → RESOLVED
+
+```typescript
+// packages/core/src/paper-trading.ts
+interface PaperPosition {
+  id: string;
+  marketId: string;
+  marketQuestion: string;
+  category: string;
+  side: "YES" | "NO";
+  entryPrice: number;         // Market price at entry
+  beliefLow: number;          // Our belief range
+  beliefHigh: number;
+  edge: number;               // Edge at entry
+  sizeUsd: number;            // Virtual position size
+  entryTimestamp: Date;
+  status: "OPEN" | "WIN" | "LOSS" | "EXPIRED";
+  exitPrice?: number;         // Final price at resolution
+  resolvedTimestamp?: Date;
+  pnl?: number;               // Calculated P&L
+  actualOutcome?: "YES" | "NO"; // What actually happened
+}
+```
+
+#### 11.2 Market Resolution Monitoring
+- [ ] Poll Polymarket API for market resolution status
+- [ ] Detect when open paper positions resolve
+- [ ] Extract actual outcome (YES/NO winner)
+- [ ] Calculate P&L: `(exitPrice - entryPrice) * sizeUsd / 100`
+
+```typescript
+interface MarketResolution {
+  marketId: string;
+  resolvedAt: Date;
+  winner: "YES" | "NO";
+  finalPriceYes: number;  // Should be ~100 or ~0
+  finalPriceNo: number;
+}
+
+// Resolution detection
+async function checkMarketResolutions(): Promise<MarketResolution[]> {
+  const openPositions = await paperTrading.getOpenPositions();
+  const resolutions: MarketResolution[] = [];
+  
+  for (const position of openPositions) {
+    const market = await polymarket.getMarket(position.marketId);
+    if (market.resolved) {
+      resolutions.push({
+        marketId: position.marketId,
+        resolvedAt: new Date(),
+        winner: market.winningOutcome,
+        finalPriceYes: market.winningOutcome === "YES" ? 100 : 0,
+        finalPriceNo: market.winningOutcome === "NO" ? 100 : 0,
+      });
+    }
+  }
+  return resolutions;
+}
+```
+
+#### 11.3 Virtual P&L Tracking
+- [ ] Calculate paper trading P&L for each resolved position
+- [ ] Track running virtual portfolio balance
+- [ ] Calculate performance metrics (win rate, avg P&L, Sharpe ratio)
+- [ ] Compare edge prediction vs actual outcome
+
+```typescript
+interface PaperTradingMetrics {
+  totalPositions: number;
+  resolvedPositions: number;
+  openPositions: number;
+  
+  // P&L Metrics
+  totalPnL: number;           // Sum of all closed positions
+  unrealizedPnL: number;      // Current open position value
+  winRate: number;            // % of winning trades
+  averageWin: number;
+  averageLoss: number;
+  profitFactor: number;       // Total wins / Total losses
+  
+  // Prediction Quality Metrics
+  edgeAccuracy: number;       // Did edge correctly predict outcome?
+  beliefCoverageRate: number; // How often did outcome fall within belief range?
+  avgEdgeOnWins: number;      // Average edge for winning trades
+  avgEdgeOnLosses: number;    // Average edge for losing trades
+  
+  // By Category
+  categoryPerformance: Map<string, {
+    winRate: number;
+    avgPnL: number;
+    trades: number;
+  }>;
+}
+```
+
+#### 11.4 Paper Trading Dashboard
+- [ ] Create paper trading status page in web dashboard
+- [ ] Display open paper positions with current unrealized P&L
+- [ ] Show resolved positions with actual outcomes
+- [ ] Visualize prediction accuracy over time
+- [ ] Performance charts: cumulative P&L, win rate by category
+
+#### 11.5 Prediction Quality Analysis
+- [ ] Compare belief ranges vs actual outcomes
+- [ ] Track calibration: "When I said 70%, was I right 70% of the time?"
+- [ ] Identify categories where predictions are best/worst
+- [ ] Suggest threshold adjustments based on historical performance
+
+```typescript
+interface CalibrationAnalysis {
+  // Calibration by belief bucket
+  calibrationBuckets: Array<{
+    beliefRange: string;        // e.g., "60-70%"
+    predictedProbability: number;
+    actualWinRate: number;
+    trades: number;
+    calibrationError: number;   // |predicted - actual|
+  }>;
+  
+  // Overall calibration score
+  brierScore: number;           // Lower is better (0 = perfect)
+  logLoss: number;              // Prediction quality metric
+  
+  // Recommendations
+  recommendations: string[];
+}
+```
+
+### Implementation Details
+
+**Files to Create:**
+- `packages/core/src/paper-trading.ts` - Paper trading position tracker
+- `packages/core/src/paper-trading.test.ts` - Comprehensive test suite
+- `apps/web/src/components/PaperTradingDashboard.tsx` - Paper trading visualization
+- `apps/web/src/pages/paper-trading.astro` - Paper trading page
+
+**Files to Modify:**
+- `packages/core/src/execution.ts` - Integrate paper position creation
+- `packages/core/src/index.ts` - Export paper trading module
+- `apps/api/src/index.ts` - Add `/api/paper-trading` endpoints
+- `apps/api/src/services/trading.ts` - Integrate paper trading tracker
+- `apps/web/src/layouts/Layout.astro` - Add navigation link
+
+**Storage Strategy:**
+```typescript
+// Paper positions stored in JSON file for persistence
+const PAPER_POSITIONS_FILE = "./data/paper-positions.json";
+
+// Resolution check runs every poll interval
+// Positions are updated when markets resolve
+```
+
+### Environment Configuration
+
+```bash
+# Paper Trading (Phase 11)
+PAPER_TRADING_ENABLED=true            # Enable paper trading tracking (default: true in simulation)
+PAPER_PORTFOLIO_CAPITAL=10000         # Virtual starting capital (default: 10000)
+PAPER_POSITIONS_FILE=./data/paper-positions.json  # Persistence file
+PAPER_RESOLUTION_CHECK_INTERVAL=300000  # Check for resolutions every 5 min (default)
+```
+
+### API Endpoints
+
+```typescript
+// Paper trading endpoints
+GET /api/paper-trading/positions      // All paper positions (open + closed)
+GET /api/paper-trading/positions/open // Open positions only
+GET /api/paper-trading/metrics        // Performance metrics
+GET /api/paper-trading/calibration    // Calibration analysis
+POST /api/paper-trading/reset         // Reset paper trading (clear all positions)
+```
+
+### Action Items
+
+**Research Phase:**
+- [ ] Analyze Polymarket market resolution API
+- [ ] Research position persistence strategies
+- [ ] Study calibration metrics (Brier score, log loss)
+- [ ] Document P&L calculation formulas
+
+**Implementation Phase:**
+- [ ] Create PaperTradingTracker class
+- [ ] Implement position storage with JSON persistence
+- [ ] Add market resolution polling
+- [ ] Implement P&L calculation on resolution
+- [ ] Create performance metrics calculator
+- [ ] Add calibration analysis
+- [ ] Create comprehensive test suite
+
+**Dashboard Phase:**
+- [ ] Create PaperTradingDashboard component
+- [ ] Add open positions table
+- [ ] Add resolved positions table
+- [ ] Add performance metrics display
+- [ ] Add calibration visualization
+- [ ] Add cumulative P&L chart
+
+**Integration Phase:**
+- [ ] Integrate with ExecutionLayer for automatic tracking
+- [ ] Add Slack notifications for paper trade results
+- [ ] Integrate with audit logging
+- [ ] Add paper trading to daily summary
+
+### Slack Notifications for Paper Trading
+
+When Slack is configured, the following notifications will be sent:
+
+```typescript
+// Paper trade opened notification
+{
+  event: "PAPER_TRADE_OPENED",
+  market: "Will Bitcoin reach $100k by March 2026?",
+  side: "YES",
+  entryPrice: 45,
+  beliefRange: [55, 70],
+  edge: 10,
+  virtualSize: "$100"
+}
+
+// Paper trade resolved notification
+{
+  event: "PAPER_TRADE_RESOLVED",
+  market: "Will Bitcoin reach $100k by March 2026?",
+  side: "YES",
+  outcome: "WIN",  // or "LOSS"
+  entryPrice: 45,
+  exitPrice: 100,  // Winner pays $1
+  pnl: "+$55.00",
+  holdingPeriod: "3 days 4 hours",
+  edgePrediction: "✅ Correct"  // Edge correctly predicted outcome
+}
+
+// Daily paper trading summary (added to existing daily summary)
+{
+  event: "DAILY_SUMMARY",
+  paperTrading: {
+    openPositions: 5,
+    resolvedToday: 2,
+    todayPnL: "+$45.00",
+    totalPnL: "+$230.00",
+    winRate: "62%",
+    edgeAccuracy: "71%"
+  }
+}
+
+// Weekly calibration report (new)
+{
+  event: "WEEKLY_CALIBRATION_REPORT",
+  period: "Dec 26 - Jan 2",
+  totalTrades: 15,
+  winRate: "60%",
+  totalPnL: "+$180.00",
+  brierScore: 0.21,  // Lower is better
+  bestCategory: "crypto (75% win rate)",
+  worstCategory: "politics (40% win rate)",
+  recommendation: "Consider increasing edge threshold for politics markets"
+}
+```
+
+**Notification Types:**
+| Event | When Sent | Purpose |
+|-------|-----------|---------|
+| Paper Trade Opened | Immediately on trade | Confirm paper position created |
+| Paper Trade Resolved | When market resolves | Show P&L and whether prediction was correct |
+| Daily Summary | Midnight UTC | Overview of paper trading performance |
+| Weekly Calibration | Sunday midnight UTC | Deeper analysis of prediction quality |
+
+### Testing Strategy
+
+**Unit Tests:**
+```typescript
+describe("PaperTradingTracker", () => {
+  it("should create paper position on simulated trade");
+  it("should persist positions to disk");
+  it("should load positions on restart");
+  it("should detect market resolution");
+  it("should calculate P&L correctly for YES winner");
+  it("should calculate P&L correctly for NO winner");
+  it("should calculate win rate accurately");
+  it("should calculate edge accuracy");
+  it("should generate calibration analysis");
+});
+```
+
+**Integration Tests:**
+- [ ] Test full lifecycle: trade → track → resolve → P&L
+- [ ] Test persistence across restarts
+- [ ] Test with expired markets
+- [ ] Test with multiple concurrent positions
+
+### Success Criteria
+
+- ✅ Paper positions tracked persistently (survive restarts)
+- ✅ Market resolutions detected automatically
+- ✅ P&L calculated correctly for all resolved positions
+- ✅ Win rate and edge accuracy metrics available
+- ✅ Dashboard shows paper trading performance
+- ✅ Calibration analysis identifies prediction quality
+- ✅ Recommendations for threshold adjustments
+- ✅ All tests pass (unit, integration)
+- ✅ Documentation complete
+
+### Migration from Simulation Mode
+
+After implementing paper trading, the simulation workflow becomes:
+
+1. **Run with Paper Trading**: `PAPER_TRADING_ENABLED=true pnpm --filter @pomabot/api dev`
+2. **Monitor Dashboard**: View open positions at `/paper-trading`
+3. **Wait for Resolutions**: Markets resolve over hours/days
+4. **Analyze Results**: Review performance metrics
+5. **Tune Parameters**: Adjust thresholds based on calibration
+6. **Go Live**: Once paper trading shows profitability, enable real trading
+
+### Estimated Impact
+
+| Metric | Before Paper Trading | After Paper Trading |
+|--------|---------------------|---------------------|
+| Prediction Validation | ❌ None | ✅ Full P&L tracking |
+| Win Rate Visibility | ❌ Unknown | ✅ Measured per category |
+| Edge Accuracy | ❌ Unknown | ✅ Tracked and analyzed |
+| Confidence to Go Live | 😰 Low | 😊 High (data-driven) |
+| Parameter Tuning | 🎲 Guesswork | 📊 Data-driven |
+
+---
+
 ## Environment Configuration
 
 ### Current Variables
@@ -1302,6 +1660,17 @@ BATCH_PROFIT_TARGET_PERCENT=10       # Take profit threshold % (default: 10)
 
 **Note:** Batch mode is for stress testing and parallel market evaluation. Use with caution.
 
+### Phase 11 Additions
+```bash
+# Paper Trading (enables prediction validation in simulation mode)
+PAPER_TRADING_ENABLED=true            # Enable paper trading tracking (default: true in simulation)
+PAPER_PORTFOLIO_CAPITAL=10000         # Virtual starting capital (default: 10000)
+PAPER_POSITIONS_FILE=./data/paper-positions.json  # Persistence file
+PAPER_RESOLUTION_CHECK_INTERVAL=300000  # Check for resolutions every 5 min (default)
+```
+
+**Note:** Paper trading tracks simulated positions until market resolution to validate prediction accuracy.
+
 ---
 
 ## Risk Management Checklist
@@ -1334,6 +1703,7 @@ Before enabling live trading:
 | 8 | Comprehensive Documentation | 1 week | ✅ Complete |
 | 9 | Parallel Market Testing | 2-3 weeks | 🚧 In Progress |
 | 10 | Reddit Data Access Alternatives | 2-3 weeks | ✅ Complete |
+| 11 | Paper Trading & Prediction Validation | 2-3 weeks | 📋 Planned |
 
 ---
 

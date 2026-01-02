@@ -1,5 +1,229 @@
 # Copilot Changes
 
+## 2026-01-02: Added Phase 11 - Paper Trading & Prediction Validation to ROADMAP.md
+
+### Summary
+Added a comprehensive new Phase 11 to the ROADMAP.md file to implement proper paper trading with prediction validation.
+
+### Context
+The current simulation mode has a critical gap:
+- Trade opportunities are logged but **outcomes are never tracked**
+- No way to validate if predictions were correct
+- Cannot measure win rate, P&L, or edge accuracy
+- ExecutionLayer has a TODO: "Track actual P&L when real trading enabled"
+
+This makes it impossible to confidently transition from simulation to live trading.
+
+### Files Modified
+
+**[ROADMAP.md](ROADMAP.md)**
+- Added new "Phase 11: Paper Trading & Prediction Validation 📊" section
+- Updated Timeline Summary table with Phase 11
+- Added Phase 11 environment variables to Environment Configuration section
+
+### Key Content Added
+
+**Milestones:**
+
+1. **Paper Trading Position Tracker (11.1)**
+   - Persistent position storage (JSON file)
+   - Track entry: market ID, side, entry price, belief range, edge
+   - Support position lifecycle: OPEN → WIN/LOSS/EXPIRED
+   - Survive restarts
+
+2. **Market Resolution Monitoring (11.2)**
+   - Poll Polymarket API for market resolution status
+   - Detect when open paper positions resolve
+   - Extract actual outcome (YES/NO winner)
+   - Calculate P&L automatically
+
+3. **Virtual P&L Tracking (11.3)**
+   - Calculate paper trading P&L for resolved positions
+   - Track running virtual portfolio balance
+   - Win rate, avg P&L, Sharpe ratio metrics
+   - Edge accuracy: did edge correctly predict outcome?
+
+4. **Paper Trading Dashboard (11.4)**
+   - Web dashboard page at `/paper-trading`
+   - Open positions with unrealized P&L
+   - Resolved positions with actual outcomes
+   - Cumulative P&L charts
+
+5. **Prediction Quality Analysis (11.5)**
+   - Calibration: "When I said 70%, was I right 70%?"
+   - Brier score and log loss metrics
+   - Category performance breakdown
+   - Threshold adjustment recommendations
+
+**Environment Configuration:**
+```bash
+PAPER_TRADING_ENABLED=true
+PAPER_PORTFOLIO_CAPITAL=10000
+PAPER_POSITIONS_FILE=./data/paper-positions.json
+PAPER_RESOLUTION_CHECK_INTERVAL=300000
+```
+
+**API Endpoints:**
+- GET /api/paper-trading/positions
+- GET /api/paper-trading/metrics
+- GET /api/paper-trading/calibration
+- POST /api/paper-trading/reset
+
+### Expected Impact
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Prediction Validation | ❌ None | ✅ Full P&L |
+| Win Rate Visibility | ❌ Unknown | ✅ Measured |
+| Edge Accuracy | ❌ Unknown | ✅ Tracked |
+| Confidence to Go Live | 😰 Low | 😊 High |
+
+---
+
+## 2026-01-02: Research - Simulation Mode, Trading Frequency, and Arbitrage
+
+### Summary
+Investigated how simulation mode works, whether high-frequency trading is possible, and whether arbitrage opportunities exist.
+
+### Key Findings
+
+#### 1. Simulation Mode: How It Works
+
+**Current Implementation:**
+- Simulation mode is **evaluation-only with order logging** - it's NOT full paper trading with P&L tracking
+- When `WALLET_PRIVATE_KEY` is not provided, the system enters simulation mode
+- Orders are created and stored locally in a Map (`this.orders`)
+- Trade opportunities are logged to CSV audit files
+- Slack notifications are sent (if configured)
+
+**What's Missing for Validation:**
+- ❌ **No virtual P&L tracking** - the system has a TODO: "Track actual P&L when real trading enabled"
+- ❌ **No position outcome simulation** - positions are registered but not tracked to resolution
+- ❌ **No market outcome tracking** - can't verify if predictions were correct
+
+**To properly validate predictions, you would need to:**
+1. Track simulated positions until market resolution
+2. Compare predicted outcomes vs actual outcomes
+3. Calculate hypothetical P&L
+
+#### 2. Trading Frequency: Why Trades Are Rare
+
+**The 8-Gate Eligibility System** (all must pass):
+
+| # | Check | Threshold |
+|---|-------|-----------|
+| 1 | Resolution authority clear? | Must be true |
+| 2 | Outcome objectively verifiable? | Must be true |
+| 3 | Liquidity ≥ minimum? | ≥$1,000 |
+| 4 | Belief width ≤ 25%? | Max 25% range |
+| 5 | Confidence ≥ 65? | Min 65 |
+| 6 | Price outside belief range? | Must be mispriced |
+| 7 | Edge ≥ category threshold? | 8-25% by category |
+| 8 | Exit plan defined? | Auto-generated |
+
+**Why Most Markets Fail:**
+- Initial beliefs start at `[40, 60]` with confidence 50
+- Confidence needs signals to build to ≥65
+- Confidence decays 0.5 per day
+- Each "unknown" penalizes confidence by -7 points
+- Edge thresholds are high (8-25% depending on category)
+
+**Expected Trades:** 0-3 per day maximum, by design
+
+#### 3. Arbitrage: Not Implemented
+
+**Current State:**
+- ❌ No arbitrage logic exists in the codebase
+- ❌ No cross-market comparison
+- ❌ No YES+NO hedging
+
+**Single-Side Logic Only:**
+```typescript
+// From trade-engine.ts
+if (marketPrice < belief.belief_low) {
+  return { edge: belief.belief_low - marketPrice, side: "YES" };
+}
+if (marketPrice > belief.belief_high) {
+  return { edge: marketPrice - belief.belief_high, side: "NO" };
+}
+```
+
+**Polymarket Arbitrage Opportunities:**
+
+1. **YES + NO Arbitrage** (not possible on single markets):
+   - On Polymarket, YES + NO prices always sum to ~$1.00
+   - Buying both sides guarantees $1 payout but costs ~$1
+   - No arbitrage opportunity within a single market
+
+2. **Cross-Platform Arbitrage** (theoretically possible):
+   - Compare Polymarket prices with Kalshi, PredictIt, etc.
+   - Not implemented in PomaBot
+   - Would require multi-exchange integration
+
+3. **Related Market Arbitrage** (not implemented):
+   - Find correlated markets with inconsistent pricing
+   - Example: "Will Bitcoin hit $100k?" vs "Will Bitcoin hit $90k?"
+   - Complex to identify and execute
+
+#### 4. Making Money: The Philosophy
+
+**Core Design Principle:**
+> "Profit is a consequence, not a control variable"
+
+**Quarter-Kelly Position Sizing:**
+- Uses conservative 25% of Kelly Criterion
+- Max 2% of capital per trade
+- Prioritizes survival over growth
+
+**The Bot Philosophy:**
+- "Inaction is always a valid and preferred outcome"
+- Only trade when market is "meaningfully wrong"
+- High edge thresholds (8-25%) mean quality over quantity
+- Conservative sizing ensures long-term survival
+
+### Recommendations for Validation
+
+To verify if predictions are reasonable, consider:
+
+1. **Add Paper Trading P&L Tracking:**
+   - Track positions until market resolution
+   - Compare predicted vs actual outcomes
+   - Calculate hypothetical returns
+
+2. **Lower Thresholds for Testing:**
+   - Reduce edge thresholds temporarily
+   - Reduce confidence requirements
+   - Increase poll frequency
+   - This will generate more opportunities to analyze
+
+3. **Batch Processing Mode:**
+   - Use Phase 9 batch processing to evaluate many markets
+   - See which would have been traded
+   - Validate edge calculations
+
+### Environment Variables for More Activity
+
+```bash
+# Increase polling frequency (more evaluations)
+POLL_INTERVAL=10000
+
+# Enable verbose logging
+VERBOSE=true
+
+# Use simulation data (generates mock signals)
+SIMULATION_DATA=true
+```
+
+### Files Analyzed
+
+- [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)
+- [packages/core/src/execution.ts](packages/core/src/execution.ts)
+- [packages/core/src/trade-engine.ts](packages/core/src/trade-engine.ts)
+- [packages/core/src/trade-history.ts](packages/core/src/trade-history.ts)
+- [apps/api/src/connectors/polymarket.ts](apps/api/src/connectors/polymarket.ts)
+
+---
+
 ## 2026-01-01: Added Phase 10 - Reddit Data Access Alternatives to ROADMAP.md
 
 ### Summary
