@@ -119,6 +119,28 @@ async function main() {
       res.end(JSON.stringify(config));
       return;
     }
+    
+    // Phase 11: Paper trading endpoints
+    if (req.url === "/api/paper-trading/positions") {
+      const positions = tradingService.getPaperTradingPositions();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ positions: positions ?? [], total: positions?.length ?? 0 }));
+      return;
+    }
+    
+    if (req.url === "/api/paper-trading/metrics") {
+      const metrics = tradingService.getPaperTradingMetrics();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(metrics ?? {}));
+      return;
+    }
+    
+    if (req.url === "/api/paper-trading/calibration") {
+      const calibration = tradingService.getPaperTradingCalibration();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(calibration ?? {}));
+      return;
+    }
 
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
@@ -126,7 +148,7 @@ async function main() {
 
   server.listen(HTTP_PORT, () => {
     console.log(`🌐 HTTP API server running on http://localhost:${HTTP_PORT}`);
-    console.log(`   Endpoints: /api/status, /api/markets, /api/health, /api/performance, /api/trade-history, /api/portfolio, /api/batch/config`);
+    console.log(`   Endpoints: /api/status, /api/markets, /api/health, /api/performance, /api/trade-history, /api/portfolio, /api/batch/config, /api/paper-trading/*`);
   });
 
   // Log status every 5 minutes
