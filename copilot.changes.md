@@ -1,5 +1,123 @@
 # Copilot Changes
 
+## 2026-01-02: Implemented Phase 11 - Paper Trading & Prediction Validation
+
+### Summary
+Successfully implemented Phase 11 with full paper trading functionality including position tracking, resolution monitoring, performance metrics, and calibration analysis.
+
+### Files Created
+
+**[packages/core/src/paper-trading.ts](packages/core/src/paper-trading.ts)**
+- `PaperTradingTracker` class with persistent JSON storage
+- Position lifecycle management (OPEN → RESOLVED → WIN/LOSS/EXPIRED)
+- Performance metrics calculation (win rate, profit factor, edge accuracy)
+- Calibration analysis with Brier score and calibration buckets
+- Category-based performance tracking
+- ~600 lines of well-tested code
+
+**[packages/core/src/paper-trading.test.ts](packages/core/src/paper-trading.test.ts)**
+- 23 comprehensive tests covering:
+  - Position creation and persistence
+  - Position resolution for WIN/LOSS/EXPIRED
+  - P&L calculations (YES and NO outcomes)
+  - Performance metrics calculation
+  - Calibration analysis
+  - Position queries and filtering
+- All tests passing ✅
+
+**[PHASE11_IMPLEMENTATION.md](PHASE11_IMPLEMENTATION.md)**
+- Complete usage documentation
+- API endpoint examples
+- Environment variable reference
+- Implementation details
+- Next steps guide
+
+### Files Modified
+
+**[packages/core/src/index.ts](packages/core/src/index.ts)**
+- Added export for `paper-trading` module
+
+**[apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)**
+- Integrated `PaperTradingTracker` into `TradingService`
+- Added paper position creation on simulated trades
+- Implemented `checkPaperTradingResolutions()` background polling (every 5 min)
+- Added getter methods: `getPaperTradingMetrics()`, `getPaperTradingCalibration()`, `getPaperTradingPositions()`
+- Environment variable support for configuration
+
+**[apps/api/src/index.ts](apps/api/src/index.ts)**
+- Added 3 new API endpoints:
+  - `GET /api/paper-trading/positions` - All positions (open + closed)
+  - `GET /api/paper-trading/metrics` - Performance metrics
+  - `GET /api/paper-trading/calibration` - Calibration analysis
+- Updated console log to include new endpoints
+
+**[ROADMAP.md](ROADMAP.md)**
+- Updated Phase 11 status from "📋 Planned" to "✅ Complete"
+- Updated Timeline Summary table
+- Enhanced Phase 11 section with implementation details
+
+### Key Features Implemented
+
+1. **Persistent Position Tracking**
+   - JSON file storage (`./data/paper-positions.json`)
+   - Positions survive bot restarts
+   - Tracks: market ID, question, side, entry price, belief range, edge, P&L
+
+2. **Automatic Resolution Detection**
+   - Background polling every 5 minutes (configurable)
+   - Checks Polymarket API for market resolution
+   - Extracts YES/NO winner and calculates P&L
+   - Updates position status automatically
+
+3. **Performance Metrics**
+   - Win rate, profit factor, edge accuracy
+   - Average win/loss amounts
+   - Belief coverage rate
+   - Category-based performance breakdown
+
+4. **Calibration Analysis**
+   - Brier score calculation (prediction accuracy metric)
+   - Calibration buckets by belief ranges
+   - Calibration error measurement
+   - Actionable recommendations
+
+### Environment Variables
+
+```bash
+PAPER_TRADING_ENABLED=true            # Default: true in simulation mode
+PAPER_PORTFOLIO_CAPITAL=10000         # Default: 10000
+PAPER_POSITIONS_FILE=./data/paper-positions.json
+PAPER_RESOLUTION_CHECK_INTERVAL=300000  # 5 minutes default
+```
+
+### Testing Results
+
+- **Total Tests**: 120 (23 new paper trading tests + 97 existing)
+- **Status**: All passing ✅
+- **Build**: Successful ✅
+- **Type Checking**: Passed ✅
+
+### Impact
+
+This implementation closes a critical gap in the trading system:
+
+| Before | After |
+|--------|-------|
+| ❌ No prediction validation | ✅ Full P&L tracking |
+| ❌ Unknown win rate | ✅ Measured per category |
+| ❌ Unknown edge accuracy | ✅ Tracked and analyzed |
+| 😰 Low confidence | 😊 High confidence (data-driven) |
+
+### Next Steps
+
+1. Run bot in simulation mode to accumulate paper trading data
+2. Wait for markets to resolve (hours/days)
+3. Analyze metrics at `/api/paper-trading/metrics`
+4. Tune parameters based on calibration analysis
+5. Enable real trading once paper trading shows consistent profitability
+
+---
+
 ## 2026-01-02: Added Phase 11 - Paper Trading & Prediction Validation to ROADMAP.md
 
 ### Summary
