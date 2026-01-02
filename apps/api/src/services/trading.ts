@@ -146,17 +146,14 @@ export class TradingService {
       maxDrawdownPercent: parseFloat(process.env.MAX_DRAWDOWN_PERCENT ?? "10"),
     });
     
-    // Phase 11: Initialize paper trading
+    // Phase 11: Initialize paper trading with Slack notifier
     this.paperTradingEnabled = process.env.PAPER_TRADING_ENABLED !== "false"; // Default true
     this.resolutionCheckInterval = parseInt(
       process.env.PAPER_RESOLUTION_CHECK_INTERVAL ?? "300000", 
       10
     ); // Default 5 minutes
     
-    this.paperTrading = new PaperTradingTracker(
-      process.env.PAPER_POSITIONS_FILE ?? "./data/paper-positions.json",
-      parseFloat(process.env.PAPER_PORTFOLIO_CAPITAL ?? "10000")
-    );
+    this.paperTrading = new PaperTradingTracker(this.notifier);
   }
 
   /**

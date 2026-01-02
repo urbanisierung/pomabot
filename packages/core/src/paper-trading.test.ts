@@ -2,25 +2,15 @@
  * Paper Trading Module Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { PaperTradingTracker } from "./paper-trading.js";
-import { unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
-
-const TEST_STORAGE_FILE = "./data/test-paper-positions.json";
 
 describe("PaperTradingTracker", () => {
   let tracker: PaperTradingTracker;
 
   beforeEach(async () => {
-    tracker = new PaperTradingTracker(TEST_STORAGE_FILE, 10000);
+    tracker = new PaperTradingTracker();
     await tracker.initialize();
-  });
-
-  afterEach(async () => {
-    if (existsSync(TEST_STORAGE_FILE)) {
-      await unlink(TEST_STORAGE_FILE);
-    }
   });
 
   describe("Position Creation", () => {
@@ -44,7 +34,7 @@ describe("PaperTradingTracker", () => {
       expect(position.entryPrice).toBe(45);
     });
 
-    it("should persist position to disk", async () => {
+    it("should keep position in memory", async () => {
       await tracker.createPosition({
         marketId: "market-1",
         marketQuestion: "Test market",
@@ -57,13 +47,8 @@ describe("PaperTradingTracker", () => {
         sizeUsd: 100,
       });
 
-      expect(existsSync(TEST_STORAGE_FILE)).toBe(true);
-
-      // Create new tracker and load from disk
-      const newTracker = new PaperTradingTracker(TEST_STORAGE_FILE, 10000);
-      await newTracker.initialize();
-
-      const positions = newTracker.getAllPositions();
+      // Verify position is in memory
+      const positions = tracker.getAllPositions();
       expect(positions.length).toBe(1);
       expect(positions[0].marketId).toBe("market-1");
     });

@@ -2,27 +2,34 @@
 
 ## Overview
 
-Phase 11 implements **Paper Trading & Prediction Validation**, enabling the bot to track simulated positions until market resolution, calculate actual P&L, and validate trading strategy performance.
+Phase 11 implements **Paper Trading & Prediction Validation** with **in-memory storage only**. All state changes are posted to Slack for complete transparency, enabling the bot to validate trading strategy performance without file persistence.
 
 ## Key Features
 
-### 1. Position Tracking
-- **Persistent Storage**: Paper positions saved to `./data/paper-positions.json` (configurable)
+### 1. In-Memory Position Tracking
+- **No File Persistence**: Positions stored in memory only
+- **Slack Transparency**: All state changes posted to Slack
 - **Lifecycle Management**: Positions tracked from OPEN → RESOLVED (WIN/LOSS/EXPIRED)
-- **Restart Safe**: Positions survive bot restarts
+- **Lightweight**: No disk I/O overhead
 
-### 2. Automatic Resolution Detection
+### 2. Automatic Slack Notifications
+- **Position Created**: Immediate notification when paper position is opened
+- **Position Resolved**: Notification with P&L when market resolves
+- **Position Expired**: Notification when market closes without resolution
+- **Full Details**: Side, entry/exit price, P&L, edge accuracy, holding period
+
+### 3. Automatic Resolution Detection
 - **Background Polling**: Checks every 5 minutes (configurable)
 - **Market Status**: Detects resolved, closed, or expired markets
 - **Outcome Extraction**: Determines YES/NO winner from Polymarket API
 
-### 3. Performance Metrics
+### 4. Performance Metrics
 - **Win Rate**: Percentage of profitable trades
 - **Profit Factor**: Total wins / Total losses
 - **Edge Accuracy**: How often edge predictions were correct
 - **Category Performance**: Win rates by market category (crypto, sports, etc.)
 
-### 4. Calibration Analysis
+### 5. Calibration Analysis
 - **Brier Score**: Measures prediction accuracy (lower is better)
 - **Calibration Buckets**: Groups trades by belief ranges
 - **Recommendations**: Suggests threshold adjustments
@@ -35,32 +42,32 @@ Phase 11 implements **Paper Trading & Prediction Validation**, enabling the bot 
 # Enable paper trading (enabled by default in simulation mode)
 PAPER_TRADING_ENABLED=true
 
-# Virtual starting capital
-PAPER_PORTFOLIO_CAPITAL=10000
-
-# Storage location
-PAPER_POSITIONS_FILE=./data/paper-positions.json
-
 # Resolution check interval (5 minutes default)
 PAPER_RESOLUTION_CHECK_INTERVAL=300000
+
+# Slack webhook (REQUIRED for transparency)
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 ```
 
 ### Running the Bot
 
 ```bash
 # Start in simulation mode with paper trading
+# Slack notifications will show all position changes
 pnpm --filter @pomabot/api dev
 
 # The bot will:
 # 1. Create paper positions for each simulated trade
-# 2. Store them to disk
+# 2. Post creation details to Slack
 # 3. Check for resolutions every 5 minutes
-# 4. Calculate P&L when markets resolve
+# 4. Post resolution details (P&L, outcome) to Slack
 ```
 
 ### API Endpoints
 
-#### Get All Positions
+**Note**: With in-memory storage, positions are lost on restart. Check Slack for complete history.
+
+#### Get All Positions (Current Session)
 ```bash
 curl http://localhost:4000/api/paper-trading/positions
 ```
@@ -145,12 +152,69 @@ Response:
 }
 ```
 
+## Slack Notifications
+
+All paper trading state changes are automatically posted to Slack for complete transparency:
+
+### Position Created Notification
+```
+📝 Paper Position Created: YES
+
+Will Bitcoin reach $100k by March 2026?
+
+Side: YES
+Entry Price: 45%
+Edge: 10.0%
+Size: $100
+Belief Range: 55-70%
+Category: crypto
+
+Position ID: paper_abc123_xyz | Created: 2026-01-02T08:00:00.000Z
+```
+
+### Position Resolved Notification
+```
+✅ Paper Position Resolved: WIN
+
+Will Bitcoin reach $100k by March 2026?
+
+Side: YES
+Outcome: YES
+Entry Price: 45%
+Exit Price: 100%
+P&L: +$55.00
+Holding Period: 72h
+
+Edge Prediction: ✅ Correct (Edge: 10.0%)
+
+Position ID: paper_abc123_xyz | Category: crypto
+```
+
+### Position Expired Notification
+```
+⏰ Paper Position Expired
+
+Will Bitcoin reach $100k by March 2026?
+
+Side: YES
+Entry Price: 45%
+Category: crypto
+
+Position ID: paper_abc123_xyz | Market closed without resolution data
+```
+
+**Why Slack?**
+- **Complete History**: All position changes are logged even after bot restarts
+- **Transparency**: Team can see all paper trading activity in real-time
+- **Auditability**: Searchable history of predictions and outcomes
+- **Notifications**: Immediate alerts when positions resolve
+
 ## How It Works
 
 ### 1. Position Creation
 When a simulated trade is executed:
 ```typescript
-// Automatically created by TradingService
+// Automatically created by TradingService and posted to Slack
 await paperTrading.createPosition({
   marketId: "0x123...",
   marketQuestion: "Will Bitcoin reach $100k?",
@@ -207,7 +271,7 @@ pnpm test paper-trading.test.ts
 ```
 
 All 23 paper trading tests should pass:
-- Position creation and persistence ✅
+- Position creation (in-memory) ✅
 - Position resolution (WIN/LOSS/EXPIRED) ✅
 - P&L calculations ✅
 - Performance metrics ✅
@@ -215,29 +279,47 @@ All 23 paper trading tests should pass:
 
 ## Files Changed
 
-### New Files
-- `packages/core/src/paper-trading.ts` - Core paper trading implementation
-- `packages/core/src/paper-trading.test.ts` - Comprehensive test suite
-
 ### Modified Files
-- `packages/core/src/index.ts` - Export paper trading module
-- `apps/api/src/index.ts` - Add paper trading API endpoints
-- `apps/api/src/services/trading.ts` - Integrate paper trading
-- `ROADMAP.md` - Update Phase 11 status to Complete
+- `packages/core/src/paper-trading.ts` - Removed file persistence, added Slack notifications
+- `packages/core/src/paper-trading.test.ts` - Updated tests for in-memory storage
+- `packages/core/src/notifications.ts` - Made sendMessage() public, exported SlackBlock
+- `apps/api/src/services/trading.ts` - Pass SlackNotifier to PaperTradingTracker
+- `PHASE11_IMPLEMENTATION.md` - Updated documentation
+
+### Key Changes
+1. **Removed**: JSON file persistence (`readFile`, `writeFile`, `persist()` method)
+2. **Removed**: `storageFile` and `portfolioCapital` constructor parameters
+3. **Added**: `SlackNotifier` parameter to constructor
+4. **Added**: Three Slack notification methods (`notifyPositionCreated`, `notifyPositionResolved`, `notifyPositionExpired`)
+5. **Updated**: `initialize()` is now a no-op (no file loading)
+6. **Updated**: Tests to work with in-memory storage
+
+### New Files
+- `packages/core/src/paper-trading.ts` - Core paper trading implementation (originally created, now modified for in-memory + Slack)
+- `packages/core/src/paper-trading.test.ts` - Comprehensive test suite (updated for in-memory)
 
 ## Next Steps
 
-1. **Run in Simulation Mode**: Let the bot create paper positions
-2. **Wait for Resolutions**: Markets will resolve over hours/days
-3. **Analyze Performance**: Check metrics at `/api/paper-trading/metrics`
-4. **Tune Parameters**: Use calibration analysis to adjust thresholds
-5. **Go Live**: Once paper trading shows consistent profitability, enable real trading
+1. **Configure Slack**: Set `SLACK_WEBHOOK_URL` environment variable (REQUIRED)
+2. **Run in Simulation Mode**: Let the bot create paper positions
+3. **Monitor Slack**: All position changes will be posted to Slack channel
+4. **Wait for Resolutions**: Markets will resolve over hours/days
+5. **Analyze Performance**: Check metrics at `/api/paper-trading/metrics`
+6. **Tune Parameters**: Use calibration analysis to adjust thresholds
+7. **Go Live**: Once paper trading shows consistent profitability, enable real trading
+
+## Important Notes
+
+- **In-Memory Only**: Positions are lost on restart. Use Slack history for complete records.
+- **Slack Required**: Without Slack configured, there's no persistent record of paper trades.
+- **Transparency**: All team members with Slack access can see paper trading performance.
+- **Auditability**: Slack provides searchable, timestamped history of all predictions and outcomes.
 
 ## Future Enhancements (Optional)
 
 - [ ] Web dashboard for paper trading visualization
-- [ ] Slack notifications for paper trade results
-- [ ] Weekly calibration reports
+- [x] Slack notifications for all paper trade state changes
+- [ ] Weekly calibration reports in Slack
 - [ ] Unrealized P&L tracking based on current prices
 
 ---

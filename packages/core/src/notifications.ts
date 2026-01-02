@@ -59,7 +59,7 @@ export interface DailySummary {
   marketsMonitored: number;
 }
 
-interface SlackBlock {
+export interface SlackBlock {
   type: string;
   text?: {
     type: string;
@@ -137,9 +137,9 @@ export class SlackNotifier {
   }
 
   /**
-   * Send a message to Slack
+   * Send a message to Slack (public for external use)
    */
-  private async sendMessage(blocks: SlackBlock[], text: string): Promise<void> {
+  async sendMessage(blocks: SlackBlock[], text: string): Promise<void> {
     if (!this.isEnabled()) {
       return;
     }

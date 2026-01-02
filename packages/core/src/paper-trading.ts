@@ -3,16 +3,15 @@
  * Phase 11: Track simulated positions until market resolution
  * 
  * Validates trading strategy by:
- * - Tracking paper positions from entry to resolution
+ * - Tracking paper positions from entry to resolution (in-memory only)
  * - Calculating actual P&L when markets resolve
  * - Measuring prediction quality (edge accuracy, calibration)
+ * - Posting all state changes to Slack for transparency
  * - Building confidence before live trading
  */
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
 import type { TradeSide } from "@pomabot/shared";
+import type { SlackNotifier, SlackBlock } from "./notifications.js";
 
 export interface PaperPosition {
   id: string;
@@ -77,46 +76,21 @@ export interface CalibrationAnalysis {
 
 /**
  * PaperTradingTracker - Tracks simulated positions until resolution
+ * All state changes are posted to Slack for transparency
  */
 export class PaperTradingTracker {
   private positions: Map<string, PaperPosition> = new Map();
-  private storageFile: string;
+  private notifier?: SlackNotifier;
 
-  constructor(
-    storageFile: string = "./data/paper-positions.json",
-    _portfolioCapital: number = 10000
-  ) {
-    this.storageFile = storageFile;
+  constructor(notifier?: SlackNotifier) {
+    this.notifier = notifier;
   }
 
   /**
-   * Initialize - load existing positions from disk
+   * Initialize - no-op since we use in-memory storage only
    */
   async initialize(): Promise<void> {
-    try {
-      if (existsSync(this.storageFile)) {
-        const content = await readFile(this.storageFile, "utf-8");
-        const data = JSON.parse(content);
-        
-        // Restore positions with Date objects
-        for (const [id, pos] of Object.entries(data)) {
-          const position = pos as PaperPosition;
-          this.positions.set(id, {
-            ...position,
-            entryTimestamp: new Date(position.entryTimestamp),
-            resolvedTimestamp: position.resolvedTimestamp 
-              ? new Date(position.resolvedTimestamp) 
-              : undefined,
-          });
-        }
-        
-        console.log(`📊 Loaded ${this.positions.size} paper positions from disk`);
-      } else {
-        console.log("📊 No existing paper positions found - starting fresh");
-      }
-    } catch (error) {
-      console.error("Failed to load paper positions:", error);
-    }
+    console.log("📊 Paper trading initialized (in-memory storage)");
   }
 
   /**
@@ -149,9 +123,12 @@ export class PaperTradingTracker {
     };
 
     this.positions.set(position.id, position);
-    await this.persist();
 
     console.log(`📝 Paper position created: ${params.side} on "${params.marketQuestion}" @ ${params.entryPrice}%`);
+    
+    // Post to Slack for transparency
+    await this.notifyPositionCreated(position);
+    
     return position;
   }
 
@@ -182,11 +159,12 @@ export class PaperTradingTracker {
     position.pnl = pnl;
     position.resolvedTimestamp = new Date();
 
-    await this.persist();
-
     console.log(
       `✅ Paper position resolved: ${position.status} | P&L: ${pnl > 0 ? "+" : ""}$${pnl.toFixed(2)} | ${position.marketQuestion}`
     );
+    
+    // Post to Slack for transparency
+    await this.notifyPositionResolved(position);
   }
 
   /**
@@ -200,8 +178,10 @@ export class PaperTradingTracker {
     position.resolvedTimestamp = new Date();
     position.pnl = 0; // No P&L for expired positions
 
-    await this.persist();
     console.log(`⏰ Paper position expired: ${position.marketQuestion}`);
+    
+    // Post to Slack for transparency
+    await this.notifyPositionExpired(position);
   }
 
   /**
@@ -453,30 +433,181 @@ export class PaperTradingTracker {
    */
   async reset(): Promise<void> {
     this.positions.clear();
-    await this.persist();
     console.log("🔄 Paper trading positions reset");
   }
 
   /**
-   * Persist positions to disk
+   * Send Slack notification when position is created
    */
-  private async persist(): Promise<void> {
+  private async notifyPositionCreated(position: PaperPosition): Promise<void> {
+    if (!this.notifier) return;
+
     try {
-      // Ensure directory exists
-      const dir = dirname(this.storageFile);
-      if (!existsSync(dir)) {
-        await mkdir(dir, { recursive: true });
-      }
-
-      // Convert Map to object for JSON serialization
-      const data: Record<string, PaperPosition> = {};
-      for (const [id, position] of this.positions.entries()) {
-        data[id] = position;
-      }
-
-      await writeFile(this.storageFile, JSON.stringify(data, null, 2), "utf-8");
+      const blocks: SlackBlock[] = [
+        {
+          type: "header",
+          text: {
+            type: "plain_text",
+            text: `📝 Paper Position Created: ${position.side}`,
+            emoji: true,
+          },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*${position.marketQuestion}*`,
+          },
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Side:*\n${position.side}` },
+            { type: "mrkdwn", text: `*Entry Price:*\n${position.entryPrice}%` },
+            { type: "mrkdwn", text: `*Edge:*\n${position.edge.toFixed(1)}%` },
+            { type: "mrkdwn", text: `*Size:*\n$${position.sizeUsd}` },
+            { type: "mrkdwn", text: `*Belief Range:*\n${position.beliefLow}-${position.beliefHigh}%` },
+            { type: "mrkdwn", text: `*Category:*\n${position.category}` },
+          ],
+        },
+        {
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: `Position ID: ${position.id} | Created: ${position.entryTimestamp.toISOString()}`,
+            },
+          ],
+        }
+      ];
+      
+      await this.notifier.sendMessage(
+        blocks,
+        `Paper Position Created: ${position.side} on ${position.marketQuestion}`
+      );
     } catch (error) {
-      console.error("Failed to persist paper positions:", error);
+      console.error("Failed to send paper position created notification:", error);
+    }
+  }
+
+  /**
+   * Send Slack notification when position is resolved
+   */
+  private async notifyPositionResolved(position: PaperPosition): Promise<void> {
+    if (!this.notifier) return;
+
+    const emoji = position.status === "WIN" ? "✅" : "❌";
+    const pnlText = position.pnl 
+      ? `${position.pnl > 0 ? "+" : ""}$${position.pnl.toFixed(2)}`
+      : "$0.00";
+    
+    const holdingPeriod = position.resolvedTimestamp && position.entryTimestamp
+      ? Math.round((position.resolvedTimestamp.getTime() - position.entryTimestamp.getTime()) / (1000 * 60 * 60))
+      : 0;
+
+    try {
+      const blocks: SlackBlock[] = [
+        {
+          type: "header",
+          text: {
+            type: "plain_text",
+            text: `${emoji} Paper Position Resolved: ${position.status}`,
+            emoji: true,
+          },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*${position.marketQuestion}*`,
+          },
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Side:*\n${position.side}` },
+            { type: "mrkdwn", text: `*Outcome:*\n${position.actualOutcome || "N/A"}` },
+            { type: "mrkdwn", text: `*Entry Price:*\n${position.entryPrice}%` },
+            { type: "mrkdwn", text: `*Exit Price:*\n${position.exitPrice || 0}%` },
+            { type: "mrkdwn", text: `*P&L:*\n${pnlText}` },
+            { type: "mrkdwn", text: `*Holding Period:*\n${holdingPeriod}h` },
+          ],
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*Edge Prediction:* ${position.status === "WIN" ? "✅ Correct" : "❌ Incorrect"} (Edge: ${position.edge.toFixed(1)}%)`,
+          },
+        },
+        {
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: `Position ID: ${position.id} | Category: ${position.category}`,
+            },
+          ],
+        }
+      ];
+      
+      await this.notifier.sendMessage(
+        blocks,
+        `Paper Position Resolved: ${position.status} - ${pnlText}`
+      );
+    } catch (error) {
+      console.error("Failed to send paper position resolved notification:", error);
+    }
+  }
+
+  /**
+   * Send Slack notification when position expires
+   */
+  private async notifyPositionExpired(position: PaperPosition): Promise<void> {
+    if (!this.notifier) return;
+
+    try {
+      const blocks: SlackBlock[] = [
+        {
+          type: "header",
+          text: {
+            type: "plain_text",
+            text: "⏰ Paper Position Expired",
+            emoji: true,
+          },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*${position.marketQuestion}*`,
+          },
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Side:*\n${position.side}` },
+            { type: "mrkdwn", text: `*Entry Price:*\n${position.entryPrice}%` },
+            { type: "mrkdwn", text: `*Category:*\n${position.category}` },
+          ],
+        },
+        {
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: `Position ID: ${position.id} | Market closed without resolution data`,
+            },
+          ],
+        }
+      ];
+      
+      await this.notifier.sendMessage(
+        blocks,
+        `Paper Position Expired: ${position.marketQuestion}`
+      );
+    } catch (error) {
+      console.error("Failed to send paper position expired notification:", error);
     }
   }
 
