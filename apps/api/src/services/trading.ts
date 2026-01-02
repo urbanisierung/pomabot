@@ -21,6 +21,7 @@ import {
   AuditLogger,
   TradeHistoryAnalyzer,
   PortfolioManager,
+  PaperTradingTracker,
   type DailySummary,
 } from "@pomabot/core";
 import type { BeliefState, Signal, Market, TradeDecision } from "@pomabot/shared";
@@ -52,6 +53,11 @@ export class TradingService {
   // Phase 7: Advanced features
   private tradeHistory: TradeHistoryAnalyzer;
   private portfolioManager: PortfolioManager;
+  
+  // Phase 11: Paper trading
+  private paperTrading: PaperTradingTracker;
+  private paperTradingEnabled: boolean;
+  private resolutionCheckInterval: number;
   
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
@@ -139,6 +145,15 @@ export class TradingService {
       correlationThreshold: parseFloat(process.env.CORRELATION_THRESHOLD ?? "0.7"),
       maxDrawdownPercent: parseFloat(process.env.MAX_DRAWDOWN_PERCENT ?? "10"),
     });
+    
+    // Phase 11: Initialize paper trading with Slack notifier
+    this.paperTradingEnabled = process.env.PAPER_TRADING_ENABLED !== "false"; // Default true
+    this.resolutionCheckInterval = parseInt(
+      process.env.PAPER_RESOLUTION_CHECK_INTERVAL ?? "300000", 
+      10
+    ); // Default 5 minutes
+    
+    this.paperTrading = new PaperTradingTracker(this.notifier);
   }
 
   /**
@@ -186,6 +201,14 @@ export class TradingService {
     await this.auditLogger.initialize();
     console.log(`   Audit logging: ENABLED`);
     
+    // Phase 11: Initialize paper trading
+    if (this.paperTradingEnabled && this.simulationMode) {
+      await this.paperTrading.initialize();
+      console.log(`   Paper trading: ENABLED`);
+      console.log(`     Storage: ${process.env.PAPER_POSITIONS_FILE ?? "./data/paper-positions.json"}`);
+      console.log(`     Virtual capital: $${process.env.PAPER_PORTFOLIO_CAPITAL ?? "10000"}`);
+    }
+    
     // Display safety controls status
     const safetyStatus = this.safetyControls.getStatus();
     console.log(`   Safety Controls:`);
@@ -207,6 +230,15 @@ export class TradingService {
     
     // Start monitoring loop
     setInterval(() => this.monitorLoop(), this.pollInterval);
+    
+    // Phase 11: Start paper trading resolution checking
+    if (this.paperTradingEnabled && this.simulationMode) {
+      setInterval(
+        () => this.checkPaperTradingResolutions(), 
+        this.resolutionCheckInterval
+      );
+      console.log(`   Paper trading resolution checks every ${this.resolutionCheckInterval / 1000}s`);
+    }
     
     // Schedule daily summary (send at midnight UTC)
     this.scheduleDailySummary();
@@ -504,6 +536,21 @@ export class TradingService {
             decision.entry_price
           );
           
+          // Phase 11: Create paper position for tracking
+          if (this.simulationMode && this.paperTradingEnabled) {
+            await this.paperTrading.createPosition({
+              marketId: state.market.id,
+              marketQuestion: state.market.question,
+              category: state.market.category,
+              side: decision.side,
+              entryPrice: decision.entry_price,
+              beliefLow: state.belief.belief_low,
+              beliefHigh: state.belief.belief_high,
+              edge,
+              sizeUsd: decision.size_usd,
+            });
+          }
+          
           // Log and notify
           if (!this.simulationMode && result.order) {
             console.log(`✅ Real trade executed: Order ${result.order.id}`);
@@ -729,5 +776,97 @@ export class TradingService {
    */
   getPortfolioStatus() {
     return this.portfolioManager.getPortfolioStatus();
+  }
+  
+  /**
+   * Phase 11: Check for paper trading position resolutions
+   */
+  private async checkPaperTradingResolutions(): Promise<void> {
+    if (!this.paperTradingEnabled || !this.simulationMode) {
+      return;
+    }
+    
+    try {
+      const openPositions = this.paperTrading.getOpenPositions();
+      
+      if (openPositions.length === 0) {
+        return;
+      }
+      
+      console.log(`🔍 Checking ${openPositions.length} open paper positions for resolution...`);
+      
+      for (const position of openPositions) {
+        try {
+          // Fetch latest market data
+          const market = await this.polymarket.getMarket(position.marketId);
+          
+          if (!market) {
+            // Market no longer available - mark as expired
+            await this.paperTrading.expirePosition(position.id);
+            continue;
+          }
+          
+          // Check if market has resolved
+          if (market.resolved_at || market.resolution_outcome !== undefined) {
+            // Market is resolved
+            const actualOutcome: "YES" | "NO" = market.resolution_outcome === true ? "YES" : "NO";
+            const exitPrice = actualOutcome === "YES" ? 100 : 0;
+            
+            await this.paperTrading.resolvePosition(
+              position.id,
+              actualOutcome,
+              exitPrice
+            );
+            
+            // Log resolution
+            await this.auditLogger.log(
+              "PAPER_TRADE_RESOLVED",
+              position.marketId,
+              position.marketQuestion,
+              `${position.side}`,
+              `Resolved: ${actualOutcome}`,
+              `${position.beliefLow}-${position.beliefHigh}`,
+              position.edge.toString(),
+              position.sizeUsd.toString(),
+              (position.pnl ?? 0).toString()
+            );
+          }
+        } catch (error) {
+          console.error(`Failed to check resolution for position ${position.id}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking paper trading resolutions:", error);
+    }
+  }
+  
+  /**
+   * Phase 11: Get paper trading metrics
+   */
+  getPaperTradingMetrics() {
+    if (!this.paperTradingEnabled) {
+      return undefined;
+    }
+    return this.paperTrading.calculateMetrics();
+  }
+  
+  /**
+   * Phase 11: Get paper trading calibration
+   */
+  getPaperTradingCalibration() {
+    if (!this.paperTradingEnabled) {
+      return undefined;
+    }
+    return this.paperTrading.calculateCalibration();
+  }
+  
+  /**
+   * Phase 11: Get paper trading positions
+   */
+  getPaperTradingPositions() {
+    if (!this.paperTradingEnabled) {
+      return undefined;
+    }
+    return this.paperTrading.getAllPositions();
   }
 }

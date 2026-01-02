@@ -13,3 +13,4 @@ export * from "./safety-controls.js";
 export * from "./trade-history.js";
 export * from "./portfolio-manager.js";
 export * from "./batch-processor.js";
+export * from "./paper-trading.js";
