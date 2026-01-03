@@ -819,16 +819,15 @@ export class TradingService {
             );
             
             // Log resolution
-            await this.auditLogger.log(
-              "PAPER_TRADE_RESOLVED",
+            await this.auditLogger.logPaperTradeResolved(
               position.marketId,
               position.marketQuestion,
-              `${position.side}`,
-              `Resolved: ${actualOutcome}`,
+              position.side,
+              actualOutcome,
               `${position.beliefLow}-${position.beliefHigh}`,
-              position.edge.toString(),
-              position.sizeUsd.toString(),
-              (position.pnl ?? 0).toString()
+              position.edge,
+              position.sizeUsd,
+              position.pnl ?? 0
             );
           }
         } catch (error) {

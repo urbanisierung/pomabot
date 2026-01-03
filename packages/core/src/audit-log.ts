@@ -17,6 +17,7 @@ export type AuditEventType =
   | "TRADE_OPPORTUNITY"
   | "TRADE_EXECUTED"
   | "POSITION_CLOSED"
+  | "PAPER_TRADE_RESOLVED"
   | "ERROR"
   | "DAILY_SUMMARY";
 
@@ -202,6 +203,32 @@ export class AuditLogger {
       timestamp: new Date().toISOString(),
       event: "DAILY_SUMMARY",
       details: JSON.stringify(summary),
+    });
+  }
+
+  /**
+   * Log paper trade resolution
+   */
+  async logPaperTradeResolved(
+    marketId: string,
+    marketQuestion: string,
+    side: string,
+    outcome: string,
+    beliefRange: string,
+    edge: number,
+    sizeUsd: number,
+    pnl: number,
+  ): Promise<void> {
+    await this.log({
+      timestamp: new Date().toISOString(),
+      event: "PAPER_TRADE_RESOLVED",
+      marketId: marketId,
+      marketQuestion: marketQuestion,
+      action: side,
+      details: `Resolved: ${outcome}. Belief: ${beliefRange}`,
+      edge: edge,
+      amount: sizeUsd,
+      pnl: pnl,
     });
   }
 
