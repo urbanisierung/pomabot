@@ -1,5 +1,61 @@
 # Copilot Changes
 
+## 2026-01-05: Fix Fly.io Auto-Stop Causing App Shutdown
+
+### Summary
+Fixed the Fly.io configuration issue that was causing the app to be automatically stopped due to "excess capacity". The app is a background worker that runs polling loops and must stay running regardless of HTTP traffic.
+
+### Root Cause
+The Fly.io configuration had:
+- `auto_stop_machines = 'stop'` - Fly.io stops machines when there's no HTTP traffic
+- `min_machines_running = 0` - Allows all machines to be stopped
+
+This is problematic because **pomabot is a background worker app** that:
+1. Polls Polymarket every 60 seconds for market updates
+2. Aggregates news signals continuously
+3. Updates beliefs and evaluates trades in the background
+4. Has an HTTP API for monitoring, but the core functionality is background polling
+
+Fly.io's autostop feature only sees "no HTTP requests" and stops the machine, but the app needs to run continuously for its polling loops to work.
+
+### Changes Made
+
+**File:** [fly.toml](fly.toml)
+- Changed `auto_stop_machines` from `'stop'` to `'off'` - Disables auto-stopping for this background worker
+- Changed `min_machines_running` from `0` to `1` - Ensures at least one machine is always running
+- Added comments explaining why autostop must be disabled for background workers
+
+### Configuration Before
+```toml
+[http_service]
+  auto_stop_machines = 'stop'
+  min_machines_running = 0
+```
+
+### Configuration After
+```toml
+[http_service]
+  # CRITICAL: Disable auto_stop for background worker apps
+  auto_stop_machines = 'off'
+  min_machines_running = 1
+```
+
+### Resource Optimization Notes
+The current configuration is already optimized for minimal resources:
+- **VM Size**: `shared-cpu-1x` (smallest available)
+- **Memory**: `256mb` (minimum for Fly.io)
+- **Count**: `1` machine (single instance)
+
+This is the most cost-effective setup for Fly.io. The app doesn't need more resources; it was being shut down due to the autostop misconfiguration.
+
+### Deployment
+After this change, redeploy with:
+```bash
+fly deploy
+```
+
+---
+
 ## 2026-01-05: Fix Fly.io Port Binding & Enhance Daily Summary
 
 ### Summary
