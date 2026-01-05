@@ -62,10 +62,17 @@ export class TradingService {
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
   
-  // Daily summary tracking
+  // Track service start time for uptime calculation
+  private startTime = new Date();
+  
+  // Daily summary tracking - enhanced with signal counts
   private dailyStats = {
     tradeOpportunities: 0,
     tradesExecuted: 0,
+    newsSignalsProcessed: 0,
+    redditSignalsProcessed: 0,
+    hackerNewsSignalsProcessed: 0,
+    beliefUpdates: 0,
     lastReset: new Date(),
   };
 
@@ -381,6 +388,11 @@ export class TradingService {
       
       // Combine all signals
       const signals = [...newsSignals, ...redditSignals];
+      
+      // Track signal counts for daily summary
+      this.dailyStats.newsSignalsProcessed += newsSignals.length;
+      this.dailyStats.redditSignalsProcessed += redditSignals.length;
+      // Note: HackerNews signals are included in newsSignals from the news aggregator
 
       // Skip state machine transitions for markets without signals (optimization)
       if (signals.length === 0) {
@@ -417,6 +429,9 @@ export class TradingService {
 
           state.belief = updatedBelief;
           state.signalHistory.push(signal);
+          
+          // Track belief update for daily summary
+          this.dailyStats.beliefUpdates++;
 
           console.log(`📈 Updated belief for ${state.market.question}:`, {
             range: [updatedBelief.belief_low, updatedBelief.belief_high],
@@ -698,6 +713,21 @@ export class TradingService {
     const now = new Date();
     const dateStr = now.toISOString().split("T")[0] ?? now.toISOString();
     
+    // Calculate uptime in hours
+    const uptimeMs = now.getTime() - this.startTime.getTime();
+    const uptimeHours = uptimeMs / (1000 * 60 * 60);
+    
+    // Get paper trading metrics if enabled
+    let paperTradingMetrics: { totalTrades: number; winRate: number; totalPnl: number } | undefined;
+    if (this.paperTradingEnabled) {
+      const ptMetrics = this.paperTrading.calculateMetrics();
+      paperTradingMetrics = {
+        totalTrades: ptMetrics.totalPositions,
+        winRate: ptMetrics.winRate / 100, // Convert percentage to decimal
+        totalPnl: ptMetrics.totalPnL,
+      };
+    }
+    
     const summary: DailySummary = {
       date: dateStr,
       totalPnl: 0, // TODO: Track actual P&L when real trading enabled
@@ -705,6 +735,15 @@ export class TradingService {
       tradeOpportunities: this.dailyStats.tradeOpportunities,
       openPositions: [], // TODO: Track positions when real trading enabled
       marketsMonitored: this.marketStates.size,
+      // Enhanced fields
+      uptimeHours,
+      newsSignalsProcessed: this.dailyStats.newsSignalsProcessed,
+      redditSignalsProcessed: this.dailyStats.redditSignalsProcessed,
+      hackerNewsSignalsProcessed: this.dailyStats.hackerNewsSignalsProcessed,
+      beliefUpdates: this.dailyStats.beliefUpdates,
+      systemHealth: this.stateMachine.isHalted() ? "unhealthy" : "healthy",
+      mode: this.simulationMode ? "Simulation" : "Live Trading",
+      paperTradingMetrics,
     };
     
     // Log daily summary
@@ -715,7 +754,7 @@ export class TradingService {
       tradesExecuted: this.dailyStats.tradesExecuted,
       positionsClosed: 0,
       totalPnL: 0,
-      systemUptime: 24, // TODO: Track actual uptime
+      systemUptime: uptimeHours,
     });
     
     await this.notifier.sendDailySummary(summary);
@@ -724,6 +763,10 @@ export class TradingService {
     this.dailyStats = {
       tradeOpportunities: 0,
       tradesExecuted: 0,
+      newsSignalsProcessed: 0,
+      redditSignalsProcessed: 0,
+      hackerNewsSignalsProcessed: 0,
+      beliefUpdates: 0,
       lastReset: now,
     };
     
