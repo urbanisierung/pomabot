@@ -49,7 +49,7 @@ export class NewsAggregator {
     ],
     economics: [
       "https://www.federalreserve.gov/feeds/press_all.xml",
-      "https://www.reuters.com/rssFeed/businessNews",
+      "https://news.google.com/rss/search?q=site%3Areuters.com+business&hl=en-US&gl=US&ceid=US%3Aen",
       "https://feeds.content.dowjones.io/public/rss/mw_topstories",
     ],
     entertainment: [
@@ -66,7 +66,7 @@ export class NewsAggregator {
       "https://feeds.arstechnica.com/arstechnica/index",
     ],
     world: [
-      "https://www.reuters.com/rssFeed/worldNews",
+      "https://news.google.com/rss/search?q=site%3Areuters.com+world&hl=en-US&gl=US&ceid=US%3Aen",
       "https://www.un.org/en/rss.xml",
       "https://feeds.bbci.co.uk/news/world/rss.xml",
       "https://www.aljazeera.com/xml/rss/all.xml",

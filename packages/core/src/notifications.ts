@@ -57,6 +57,19 @@ export interface DailySummary {
   tradeOpportunities: number;
   openPositions: PositionSummary[];
   marketsMonitored: number;
+  // Extended fields for richer daily summary
+  uptimeHours?: number;
+  newsSignalsProcessed?: number;
+  redditSignalsProcessed?: number;
+  hackerNewsSignalsProcessed?: number;
+  beliefUpdates?: number;
+  systemHealth?: "healthy" | "degraded" | "unhealthy";
+  mode?: string;
+  paperTradingMetrics?: {
+    totalTrades: number;
+    winRate: number;
+    totalPnl: number;
+  };
 }
 
 export interface SlackBlock {
@@ -332,6 +345,27 @@ export class SlackNotifier {
           .join("\n")
       : "No open positions";
 
+    // Build signals summary
+    const signalsSummary: string[] = [];
+    if (summary.newsSignalsProcessed !== undefined) {
+      signalsSummary.push(`📰 News: ${summary.newsSignalsProcessed}`);
+    }
+    if (summary.redditSignalsProcessed !== undefined) {
+      signalsSummary.push(`🔴 Reddit: ${summary.redditSignalsProcessed}`);
+    }
+    if (summary.hackerNewsSignalsProcessed !== undefined) {
+      signalsSummary.push(`🟠 HN: ${summary.hackerNewsSignalsProcessed}`);
+    }
+    const signalsText = signalsSummary.length > 0 
+      ? signalsSummary.join(" | ") 
+      : "No signals processed";
+
+    // Health status
+    const healthEmoji = summary.systemHealth === "healthy" ? "✅" : 
+                        summary.systemHealth === "degraded" ? "⚠️" : 
+                        summary.systemHealth === "unhealthy" ? "❌" : "ℹ️";
+    const healthText = summary.systemHealth ?? "unknown";
+
     const blocks: SlackBlock[] = [
       {
         type: "header",
@@ -352,14 +386,45 @@ export class SlackNotifier {
       },
       {
         type: "section",
+        fields: [
+          { type: "mrkdwn", text: `*System Health:*\n${healthEmoji} ${healthText}` },
+          { type: "mrkdwn", text: `*Mode:*\n${summary.mode ?? "Unknown"}` },
+          { type: "mrkdwn", text: `*Uptime:*\n${summary.uptimeHours !== undefined ? `${summary.uptimeHours.toFixed(1)}h` : "N/A"}` },
+          { type: "mrkdwn", text: `*Belief Updates:*\n${summary.beliefUpdates ?? 0}` },
+        ],
+      },
+      {
+        type: "section",
         text: {
           type: "mrkdwn",
-          text: `*Open Positions (${summary.openPositions.length}):*\n${positionsList}`,
+          text: `*Signals Processed:*\n${signalsText}`,
         },
       },
     ];
 
-    await this.sendMessage(blocks, `Daily Summary: ${pnlText} P&L, ${summary.tradesExecuted} trades`);
+    // Add paper trading section if available
+    if (summary.paperTradingMetrics) {
+      const ptm = summary.paperTradingMetrics;
+      blocks.push({
+        type: "section",
+        fields: [
+          { type: "mrkdwn", text: `*Paper Trading Trades:*\n${ptm.totalTrades}` },
+          { type: "mrkdwn", text: `*Paper Win Rate:*\n${(ptm.winRate * 100).toFixed(1)}%` },
+          { type: "mrkdwn", text: `*Paper P&L:*\n${ptm.totalPnl >= 0 ? "+" : ""}$${ptm.totalPnl.toFixed(2)}` },
+        ],
+      });
+    }
+
+    // Add positions section
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Open Positions (${summary.openPositions.length}):*\n${positionsList}`,
+      },
+    });
+
+    await this.sendMessage(blocks, `Daily Summary: ${pnlText} P&L, ${summary.tradesExecuted} trades, ${summary.marketsMonitored} markets monitored`);
   }
 
   /**

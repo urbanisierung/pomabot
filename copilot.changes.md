@@ -1,5 +1,67 @@
 # Copilot Changes
 
+## 2026-01-05: Fix Fly.io Port Binding & Enhance Daily Summary
+
+### Summary
+Fixed the Fly.io deployment issue where the app was not listening on the expected port, causing 502 errors. Also enhanced the daily Slack summary to provide more useful information even when no trades occur.
+
+### Issues Fixed
+
+#### 1. Port Binding Issue (502 Error)
+**Root Cause**: The HTTP server was listening on `localhost` (implicitly `127.0.0.1`) instead of `0.0.0.0`. In Docker/Fly.io environments, the server must bind to `0.0.0.0` to be accessible from outside the container.
+
+**Changes Made:**
+- **File:** [apps/api/src/index.ts](apps/api/src/index.ts)
+  - Added `HTTP_HOST` configuration that defaults to `0.0.0.0`
+  - Updated `server.listen()` to explicitly bind to `0.0.0.0:4000`
+  - Updated log message to show the actual host being used
+
+#### 2. Enhanced Daily Slack Summary
+**Root Cause**: The daily summary only showed P&L and trade counts, which wasn't useful when no trades occurred. Users needed visibility into what the system was doing.
+
+**Changes Made:**
+
+**File:** [packages/core/src/notifications.ts](packages/core/src/notifications.ts)
+- Extended `DailySummary` interface with new optional fields:
+  - `uptimeHours`: System uptime since start
+  - `newsSignalsProcessed`: Count of news signals
+  - `redditSignalsProcessed`: Count of Reddit signals
+  - `hackerNewsSignalsProcessed`: Count of HackerNews signals
+  - `beliefUpdates`: Number of belief updates performed
+  - `systemHealth`: "healthy" | "degraded" | "unhealthy"
+  - `mode`: Trading mode (Simulation/Live)
+  - `paperTradingMetrics`: Paper trading stats if enabled
+- Enhanced `sendDailySummary()` method with:
+  - Signal processing stats section
+  - System health status with emoji indicators
+  - Trading mode display
+  - Uptime tracking
+  - Paper trading metrics section (if enabled)
+
+**File:** [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)
+- Added `startTime` field to track service uptime
+- Extended `dailyStats` with signal and belief tracking
+- Updated signal processing to increment counters
+- Updated `sendDailySummaryReport()` to populate all enhanced fields
+- Added paper trading metrics to daily summary
+
+### Daily Summary Now Includes
+1. **Trading Stats**: P&L, trades executed, opportunities found
+2. **System Health**: Status indicator (✅ healthy / ⚠️ degraded / ❌ unhealthy)
+3. **Mode**: Simulation or Live Trading
+4. **Uptime**: Hours since service started
+5. **Signals Processed**: 📰 News | 🔴 Reddit | 🟠 HackerNews counts
+6. **Belief Updates**: Number of belief state changes
+7. **Paper Trading** (if enabled): Total trades, win rate, P&L
+8. **Open Positions**: Current positions with unrealized P&L
+
+### Testing Commands
+```bash
+pnpm verify  # Run all checks
+```
+
+---
+
 ## 2026-01-02: Fixed Build Error - TypeScript Compilation Issue
 
 ### Summary

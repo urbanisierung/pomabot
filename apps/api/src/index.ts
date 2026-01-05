@@ -146,8 +146,10 @@ async function main() {
     res.end(JSON.stringify({ error: "Not found" }));
   });
 
-  server.listen(HTTP_PORT, () => {
-    console.log(`🌐 HTTP API server running on http://localhost:${HTTP_PORT}`);
+  // Bind to 0.0.0.0 for Fly.io and Docker compatibility
+  const HTTP_HOST = process.env.API_HOST ?? "0.0.0.0";
+  server.listen(HTTP_PORT, HTTP_HOST, () => {
+    console.log(`🌐 HTTP API server running on http://${HTTP_HOST}:${HTTP_PORT}`);
     console.log(`   Endpoints: /api/status, /api/markets, /api/health, /api/performance, /api/trade-history, /api/portfolio, /api/batch/config, /api/paper-trading/*`);
   });
 
