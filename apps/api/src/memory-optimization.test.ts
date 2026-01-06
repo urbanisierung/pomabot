@@ -4,7 +4,7 @@
  * Verifies that signal history limits and market cleanup prevent unbounded memory growth
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 
 describe("Memory Optimization", () => {
   describe("Signal History Limit", () => {
