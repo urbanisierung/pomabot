@@ -16,9 +16,11 @@ describe("Memory Optimization", () => {
       for (let i = 0; i < 200; i++) {
         signalHistory.push(i);
         
-        // Apply the same logic as trading.ts
+        // Apply the same logic as trading.ts (using slice not splice)
         if (signalHistory.length > MAX_SIGNAL_HISTORY) {
-          signalHistory.splice(0, signalHistory.length - MAX_SIGNAL_HISTORY);
+          const newHistory = signalHistory.slice(-MAX_SIGNAL_HISTORY);
+          signalHistory.length = 0;
+          signalHistory.push(...newHistory);
         }
       }
       
@@ -40,7 +42,9 @@ describe("Memory Optimization", () => {
         });
         
         if (signalHistory.length > MAX_SIGNAL_HISTORY) {
-          signalHistory.splice(0, signalHistory.length - MAX_SIGNAL_HISTORY);
+          const newHistory = signalHistory.slice(-MAX_SIGNAL_HISTORY);
+          signalHistory.length = 0;
+          signalHistory.push(...newHistory);
         }
       }
       
@@ -180,7 +184,9 @@ describe("Memory Optimization", () => {
           signals.push(s);
           
           if (signals.length > MAX_SIGNAL_HISTORY) {
-            signals.splice(0, signals.length - MAX_SIGNAL_HISTORY);
+            const newSignals = signals.slice(-MAX_SIGNAL_HISTORY);
+            signals.length = 0;
+            signals.push(...newSignals);
           }
         }
         

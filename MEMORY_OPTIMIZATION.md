@@ -37,7 +37,7 @@ private cleanupExpiredMarkets(): void {
   
   for (const [marketId, state] of this.marketStates) {
     const shouldRemove = 
-      market.closes_at && market.closes_at < now ||
+      (market.closes_at && market.closes_at < now) ||
       market.resolved_at !== undefined ||
       market.resolution_outcome !== undefined;
     

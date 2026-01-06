@@ -360,7 +360,7 @@ export class TradingService {
       
       // Remove markets that have closed or are past their end date
       const shouldRemove = 
-        market.closes_at && market.closes_at < now ||
+        (market.closes_at && market.closes_at < now) ||
         market.resolved_at !== undefined ||
         market.resolution_outcome !== undefined;
       
