@@ -82,10 +82,13 @@ describe("Memory Optimization", () => {
         }
       });
       
-      // Simulate cleanup logic
+      // Simulate cleanup logic (matches production code)
       for (const [marketId, state] of marketStates) {
+        const market = state.market;
         const shouldRemove = 
-          state.market.closes_at && state.market.closes_at < now;
+          (market.closes_at && market.closes_at < now) ||
+          market.resolved_at !== undefined ||
+          market.resolution_outcome !== undefined;
         
         if (shouldRemove) {
           marketStates.delete(marketId);
@@ -112,11 +115,13 @@ describe("Memory Optimization", () => {
         }
       });
       
-      // Simulate cleanup logic
+      // Simulate cleanup logic (matches production code)
       for (const [marketId, state] of marketStates) {
+        const market = state.market;
         const shouldRemove = 
-          state.market.resolved_at !== undefined ||
-          state.market.resolution_outcome !== undefined;
+          (market.closes_at && market.closes_at < new Date()) ||
+          market.resolved_at !== undefined ||
+          market.resolution_outcome !== undefined;
         
         if (shouldRemove) {
           marketStates.delete(marketId);
@@ -147,10 +152,13 @@ describe("Memory Optimization", () => {
       
       const startTime = Date.now();
       
-      // Cleanup
+      // Cleanup (matches production code)
       for (const [marketId, state] of marketStates) {
+        const market = state.market;
         const shouldRemove = 
-          state.market.closes_at && state.market.closes_at < now;
+          (market.closes_at && market.closes_at < now) ||
+          market.resolved_at !== undefined ||
+          market.resolution_outcome !== undefined;
         
         if (shouldRemove) {
           marketStates.delete(marketId);
