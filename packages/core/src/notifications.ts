@@ -126,7 +126,7 @@ export class SlackNotifier {
    * Check if a specific event type is enabled
    */
   private isEventEnabled(event: NotificationEvent): boolean {
-    return this.config.enabledEvents.includes(event);
+    return this.isEnabled() && this.config.enabledEvents.includes(event);
   }
 
   /**
