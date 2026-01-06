@@ -62,6 +62,10 @@ export class TradingService {
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
   
+  // Memory management constants
+  private readonly MAX_SIGNAL_HISTORY = 50; // Keep only last 50 signals per market
+  private readonly MARKET_CLEANUP_INTERVAL = 5 * 60 * 1000; // Clean up markets every 5 minutes
+  
   // Track service start time for uptime calculation
   private startTime = new Date();
   
@@ -247,6 +251,10 @@ export class TradingService {
       console.log(`   Paper trading resolution checks every ${this.resolutionCheckInterval / 1000}s`);
     }
     
+    // Memory optimization: Periodically clean up expired markets
+    setInterval(() => this.cleanupExpiredMarkets(), this.MARKET_CLEANUP_INTERVAL);
+    console.log(`   Market cleanup every ${this.MARKET_CLEANUP_INTERVAL / 1000}s`);
+    
     // Schedule daily summary (send at midnight UTC)
     this.scheduleDailySummary();
     
@@ -284,6 +292,11 @@ export class TradingService {
       }
 
       console.log(`✓ Processed ${this.marketStates.size} markets`);
+      
+      // Memory monitoring: Log memory usage periodically
+      const memUsage = process.memoryUsage();
+      console.log(`   Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap / ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
+
 
     } catch (error) {
       console.error("Error in monitoring loop:", error);
@@ -332,6 +345,41 @@ export class TradingService {
         state.market = updatedMarket;
         state.lastChecked = new Date();
       }
+    }
+  }
+
+  /**
+   * Memory optimization: Clean up expired/closed markets to prevent memory growth
+   */
+  private cleanupExpiredMarkets(): void {
+    const now = new Date();
+    let removedCount = 0;
+    
+    for (const [marketId, state] of this.marketStates) {
+      const market = state.market;
+      
+      // Remove markets that have closed or are past their end date
+      const shouldRemove = 
+        market.closes_at && market.closes_at < now ||
+        market.resolved_at !== undefined ||
+        market.resolution_outcome !== undefined;
+      
+      if (shouldRemove) {
+        this.marketStates.delete(marketId);
+        removedCount++;
+      }
+    }
+    
+    if (removedCount > 0) {
+      console.log(`🧹 Cleaned up ${removedCount} expired markets (${this.marketStates.size} remaining)`);
+      
+      // Log memory usage after cleanup
+      if (global.gc) {
+        global.gc();
+      }
+      
+      const memUsage = process.memoryUsage();
+      console.log(`   Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap / ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
     }
   }
 
@@ -429,6 +477,11 @@ export class TradingService {
 
           state.belief = updatedBelief;
           state.signalHistory.push(signal);
+          
+          // Memory optimization: Keep only the most recent signals
+          if (state.signalHistory.length > this.MAX_SIGNAL_HISTORY) {
+            state.signalHistory = state.signalHistory.slice(-this.MAX_SIGNAL_HISTORY);
+          }
           
           // Track belief update for daily summary
           this.dailyStats.beliefUpdates++;

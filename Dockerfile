@@ -58,6 +58,10 @@ RUN mkdir -p /app/audit-logs
 ENV NODE_ENV=production
 ENV API_PORT=4000
 
+# Memory optimization: Set Node.js memory limit for 256MB container
+# Allocate 200MB to Node.js heap, leaving 56MB for V8 internals and OS
+ENV NODE_OPTIONS="--max-old-space-size=200"
+
 # Expose API port
 EXPOSE 4000
 
