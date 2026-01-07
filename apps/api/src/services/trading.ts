@@ -65,6 +65,8 @@ export class TradingService {
   // Memory management constants
   private readonly MAX_SIGNAL_HISTORY = 50; // Keep only last 50 signals per market
   private readonly MARKET_CLEANUP_INTERVAL = 5 * 60 * 1000; // Clean up markets every 5 minutes
+  private readonly MEMORY_CHECK_INTERVAL = 10 * 60 * 1000; // Check memory every 10 minutes
+  private readonly MEMORY_CRITICAL_THRESHOLD = 180; // MB - trigger aggressive cleanup
   
   // Track service start time for uptime calculation
   private startTime = new Date();
@@ -255,10 +257,64 @@ export class TradingService {
     setInterval(() => this.cleanupExpiredMarkets(), this.MARKET_CLEANUP_INTERVAL);
     console.log(`   Market cleanup every ${this.MARKET_CLEANUP_INTERVAL / 1000}s`);
     
+    // Memory optimization: Periodic memory pressure check
+    setInterval(() => this.checkMemoryPressure(), this.MEMORY_CHECK_INTERVAL);
+    console.log(`   Memory pressure check every ${this.MEMORY_CHECK_INTERVAL / 1000}s`);
+    
     // Schedule daily summary (send at midnight UTC)
     this.scheduleDailySummary();
     
     console.log("✅ Trading service running");
+  }
+
+  /**
+   * Check memory pressure and trigger aggressive cleanup if needed
+   */
+  private checkMemoryPressure(): void {
+    const memUsage = process.memoryUsage();
+    const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+    const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+    
+    console.log(`🧠 Memory check: ${heapUsedMB}MB heap / ${rssMB}MB RSS`);
+    
+    if (heapUsedMB > this.MEMORY_CRITICAL_THRESHOLD) {
+      console.warn(`⚠️ Memory pressure detected (${heapUsedMB}MB > ${this.MEMORY_CRITICAL_THRESHOLD}MB threshold)`);
+      this.performAggressiveCleanup();
+    }
+  }
+
+  /**
+   * Aggressive cleanup when memory is under pressure
+   */
+  private performAggressiveCleanup(): void {
+    console.log("🧹 Performing aggressive memory cleanup...");
+    
+    // 1. Reduce signal history to half
+    let signalsRemoved = 0;
+    for (const [_marketId, state] of this.marketStates) {
+      const halfLimit = Math.floor(this.MAX_SIGNAL_HISTORY / 2);
+      if (state.signalHistory.length > halfLimit) {
+        const toRemove = state.signalHistory.length - halfLimit;
+        state.signalHistory = state.signalHistory.slice(-halfLimit);
+        signalsRemoved += toRemove;
+      }
+    }
+    console.log(`   Trimmed ${signalsRemoved} signals from history`);
+    
+    // 2. Clean up resolved paper trading positions older than 7 days
+    if (this.paperTradingEnabled) {
+      const removedPositions = this.paperTrading.cleanupOldPositions(7);
+      console.log(`   Cleaned up ${removedPositions} old resolved positions`);
+    }
+    
+    // 3. Force garbage collection if available
+    if (global.gc) {
+      global.gc();
+      console.log("   Forced garbage collection");
+    }
+    
+    const memUsage = process.memoryUsage();
+    console.log(`   Post-cleanup: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap`);
   }
 
   /**

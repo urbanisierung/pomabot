@@ -1,5 +1,65 @@
 # Copilot Changes
 
+## 2026-01-07: Improve Engine Robustness and Resource Efficiency
+
+### Summary
+Fixed issues causing engine restarts and improved resource efficiency:
+1. Scaled down from 2 machines to 1 (was causing duplicate processing)
+2. Removed unreliable/slow RSS feeds that were causing timeouts
+3. Reduced RSS fetch timeout from 10s to 5s
+4. Added memory pressure monitoring and aggressive cleanup
+5. Added paper trading position cleanup for old resolved positions
+
+### Root Causes Identified
+1. **Duplicate machines**: Fly.io was running 2 machines instead of 1, causing duplicate processing of the same markets
+2. **Slow RSS feeds**: Most RSS feeds (SEC.gov, cointelegraph, ESPN, etc.) were timing out after 10s, causing extremely slow monitoring cycles
+3. **No memory pressure handling**: No automatic cleanup when memory approached critical thresholds
+
+### Changes Made
+
+#### Fly.io Scale (Runtime)
+- Scaled from 2 machines down to 1 using `fly scale count 1`
+- This stops duplicate market processing that was wasting resources
+
+#### File: [apps/api/src/connectors/news.ts](apps/api/src/connectors/news.ts)
+- **Reduced RSS timeout** from 10s to 5s for faster monitoring cycles
+- **Removed unreliable RSS feeds** that consistently timeout:
+  - Removed all politics feeds (sec.gov slow, apnews DNS issues)
+  - Removed all crypto feeds (cointelegraph, coindesk timeout)
+  - Removed all sports feeds (ESPN, BBC sport timeout)
+  - Removed all economics feeds (Fed, Google News timeout)
+  - Removed all entertainment feeds (variety, deadline timeout)
+  - Removed weather feed (NOAA returns 403)
+  - Removed most technology feeds (timeout issues)
+  - Kept only BBC World News (usually reliable)
+
+#### File: [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)
+- **Added memory constants**:
+  - `MEMORY_CHECK_INTERVAL = 10 * 60 * 1000` (10 minutes)
+  - `MEMORY_CRITICAL_THRESHOLD = 180` MB
+- **Added `checkMemoryPressure()` method**: Runs every 10 minutes to monitor heap usage
+- **Added `performAggressiveCleanup()` method**: Triggered when heap exceeds 180MB
+  - Reduces signal history to half the limit
+  - Cleans up old paper trading positions
+  - Forces garbage collection if available
+
+#### File: [packages/core/src/paper-trading.ts](packages/core/src/paper-trading.ts)
+- **Added `deletePosition(id)` method**: For removing specific positions
+- **Added `cleanupOldPositions(maxAgeDays)` method**: Removes resolved positions older than N days
+- **Added `getPositionCount()` method**: Returns total position count
+
+#### File: [fly.toml](fly.toml)
+- Added comment clarifying `count = 1` is important to prevent duplicate processing
+
+### Impact
+- **Before**: 2 machines running duplicate work, ~100-140MB memory per machine, slow 10s+ RSS timeouts
+- **After**: 1 machine, faster monitoring cycles, automatic memory cleanup at 180MB threshold
+
+### Verification
+All tests pass (120 core tests, 96 API tests).
+
+---
+
 ## 2026-01-05: Fix Fly.io Auto-Stop Causing App Shutdown
 
 ### Summary

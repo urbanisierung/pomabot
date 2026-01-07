@@ -33,15 +33,16 @@ export class NewsAggregator {
   private minFetchInterval = 300000; // 5 minutes between fetches per source
   
   // RSS feeds organized by market category
+  // OPTIMIZED: Reduced timeout to 5s, running single instance
+  // Removed feeds with consistent issues (apnews DNS, noaa 403)
   private readonly RSS_SOURCES: Record<MarketCategory, string[]> = {
     politics: [
       "https://www.sec.gov/news/pressreleases.rss",
-      "https://feeds.apnews.com/rss/APPolitics",
+      // Removed apnews - DNS resolution issues
     ],
     crypto: [
       "https://www.sec.gov/news/pressreleases.rss", // Crypto regulation
       "https://cointelegraph.com/rss",
-      "https://www.coindesk.com/arc/outboundfeeds/rss/",
     ],
     sports: [
       "https://www.espn.com/espn/rss/news",
@@ -49,25 +50,18 @@ export class NewsAggregator {
     ],
     economics: [
       "https://www.federalreserve.gov/feeds/press_all.xml",
-      "https://news.google.com/rss/search?q=site%3Areuters.com+business&hl=en-US&gl=US&ceid=US%3Aen",
-      "https://feeds.content.dowjones.io/public/rss/mw_topstories",
     ],
     entertainment: [
       "https://variety.com/feed/",
-      "https://www.hollywoodreporter.com/feed/",
-      "https://deadline.com/feed/",
     ],
     weather: [
-      "https://www.noaa.gov/rss",
+      // Removed noaa - returns 403
     ],
     technology: [
       "https://techcrunch.com/feed/",
       "https://www.theverge.com/rss/index.xml",
-      "https://feeds.arstechnica.com/arstechnica/index",
     ],
     world: [
-      "https://news.google.com/rss/search?q=site%3Areuters.com+world&hl=en-US&gl=US&ceid=US%3Aen",
-      "https://www.un.org/en/rss.xml",
       "https://feeds.bbci.co.uk/news/world/rss.xml",
       "https://www.aljazeera.com/xml/rss/all.xml",
     ],
@@ -76,7 +70,7 @@ export class NewsAggregator {
 
   constructor() {
     this.parser = new Parser({
-      timeout: 10000,
+      timeout: 5000, // 5s timeout (reduced from 10s for faster cycles)
       customFields: {
         item: [
           ['description', 'summary'],
