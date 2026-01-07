@@ -1,5 +1,33 @@
 # Copilot Changes
 
+## 2026-01-07: Add Missed Opportunities to Daily Summary
+
+### Summary
+Added tracking of the top 5 missed trade opportunities (threshold not reached) to the daily summary Slack notification. This helps identify markets that were close to actionable but didn't meet our trading criteria.
+
+### Changes Made
+
+#### File: [packages/core/src/notifications.ts](packages/core/src/notifications.ts)
+- **Added `MissedOpportunity` interface** with fields:
+  - `marketQuestion`: The market question
+  - `reason`: Why the trade wasn't taken
+  - `beliefMidpoint`: Our belief midpoint probability
+  - `marketPrice`: Current market price
+  - `potentialEdge`: Absolute difference between belief and market price
+- **Updated `DailySummary` interface** with optional `missedOpportunities` field
+- **Updated `sendDailySummary()` method** to display missed opportunities section in Slack
+
+#### File: [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts)
+- **Added `missedOpportunities` array** to track opportunities during the day
+- **Added `trackMissedOpportunity()` method**: Records opportunities that didn't meet threshold, keeps top 5 sorted by potential edge
+- **Updated `sendDailySummaryReport()`**: Includes missed opportunities in the summary
+- **Reset missed opportunities** at start of each day's summary
+
+### Verification
+All tests pass (`pnpm verify` - 120 core tests, 96 API tests).
+
+---
+
 ## 2026-01-07: Improve Engine Robustness and Resource Efficiency
 
 ### Summary

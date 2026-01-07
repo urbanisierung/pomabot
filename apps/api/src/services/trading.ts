@@ -81,6 +81,17 @@ export class TradingService {
     beliefUpdates: 0,
     lastReset: new Date(),
   };
+  
+  // Track missed opportunities (markets evaluated but not traded)
+  // Sorted by potential edge, kept to top 5
+  private readonly MAX_MISSED_OPPORTUNITIES = 5;
+  private missedOpportunities: Array<{
+    marketQuestion: string;
+    reason: string;
+    beliefMidpoint: number;
+    marketPrice: number;
+    potentialEdge: number;
+  }> = [];
 
   constructor() {
     // Check if wallet credentials are provided
@@ -704,6 +715,9 @@ export class TradingService {
         decision.reason
       );
       
+      // Track as missed opportunity for daily summary
+      this.trackMissedOpportunity(state, decision.reason ?? "Unknown reason");
+      
       // Verbose logging in simulation mode
       if (process.env.VERBOSE === "true") {
         console.log(`⏸️ No trade for ${state.market.question}: ${decision.reason}`);
@@ -712,6 +726,38 @@ export class TradingService {
       if (this.stateMachine.getCurrentState() === "EVALUATE_TRADE") {
         this.stateMachine.transition("OBSERVE", "No trade - continuing observation");
       }
+    }
+  }
+  
+  /**
+   * Track a missed opportunity (evaluated but not traded)
+   * Keeps top 5 by potential edge
+   */
+  private trackMissedOpportunity(state: MarketState, reason: string): void {
+    const beliefMidpoint = (state.belief.belief_low + state.belief.belief_high) / 2;
+    const marketPrice = state.market.current_price;
+    const potentialEdge = Math.abs(beliefMidpoint - marketPrice);
+    
+    // Only track if there's some edge potential (at least 3%)
+    if (potentialEdge < 3) {
+      return;
+    }
+    
+    const opportunity = {
+      marketQuestion: state.market.question,
+      reason,
+      beliefMidpoint,
+      marketPrice,
+      potentialEdge,
+    };
+    
+    // Add to list and sort by edge descending
+    this.missedOpportunities.push(opportunity);
+    this.missedOpportunities.sort((a, b) => b.potentialEdge - a.potentialEdge);
+    
+    // Keep only top N
+    if (this.missedOpportunities.length > this.MAX_MISSED_OPPORTUNITIES) {
+      this.missedOpportunities = this.missedOpportunities.slice(0, this.MAX_MISSED_OPPORTUNITIES);
     }
   }
 
@@ -853,6 +899,10 @@ export class TradingService {
       systemHealth: this.stateMachine.isHalted() ? "unhealthy" : "healthy",
       mode: this.simulationMode ? "Simulation" : "Live Trading",
       paperTradingMetrics,
+      // Top missed opportunities
+      missedOpportunities: this.missedOpportunities.length > 0 
+        ? [...this.missedOpportunities] 
+        : undefined,
     };
     
     // Log daily summary
@@ -878,6 +928,9 @@ export class TradingService {
       beliefUpdates: 0,
       lastReset: now,
     };
+    
+    // Reset missed opportunities
+    this.missedOpportunities = [];
     
     console.log(`📊 Daily summary sent for ${dateStr}`);
   }
