@@ -50,6 +50,14 @@ export interface PositionSummary {
   unrealizedPnl: number;
 }
 
+export interface MissedOpportunity {
+  marketQuestion: string;
+  reason: string;
+  beliefMidpoint: number;  // Our belief midpoint
+  marketPrice: number;     // Current market price
+  potentialEdge: number;   // |beliefMidpoint - marketPrice|
+}
+
 export interface DailySummary {
   date: string;
   totalPnl: number;
@@ -70,6 +78,8 @@ export interface DailySummary {
     winRate: number;
     totalPnl: number;
   };
+  // Top missed opportunities (threshold not reached)
+  missedOpportunities?: MissedOpportunity[];
 }
 
 export interface SlackBlock {
@@ -412,6 +422,21 @@ export class SlackNotifier {
           { type: "mrkdwn", text: `*Paper Win Rate:*\n${(ptm.winRate * 100).toFixed(1)}%` },
           { type: "mrkdwn", text: `*Paper P&L:*\n${ptm.totalPnl >= 0 ? "+" : ""}$${ptm.totalPnl.toFixed(2)}` },
         ],
+      });
+    }
+
+    // Add missed opportunities section if available
+    if (summary.missedOpportunities && summary.missedOpportunities.length > 0) {
+      const missedList = summary.missedOpportunities
+        .map((m, i) => `${i + 1}. _${m.marketQuestion.slice(0, 60)}${m.marketQuestion.length > 60 ? "..." : ""}_\n   Edge: ${m.potentialEdge.toFixed(1)}% | Belief: ${m.beliefMidpoint.toFixed(0)}% vs Market: ${m.marketPrice.toFixed(0)}%\n   ❌ ${m.reason}`)
+        .join("\n\n");
+      
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*🎯 Top ${summary.missedOpportunities.length} Near-Miss Opportunities:*\n${missedList}`,
+        },
       });
     }
 
