@@ -208,6 +208,44 @@ export class PaperTradingTracker {
   }
 
   /**
+   * Delete a position by ID (used for memory cleanup)
+   */
+  deletePosition(id: string): boolean {
+    return this.positions.delete(id);
+  }
+
+  /**
+   * Clean up old resolved positions to free memory
+   * Returns number of positions removed
+   */
+  cleanupOldPositions(maxAgeDays: number = 7): number {
+    const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
+    let removedCount = 0;
+    
+    for (const [id, position] of this.positions) {
+      if (position.status !== "OPEN" && 
+          position.resolvedTimestamp && 
+          position.resolvedTimestamp < cutoffDate) {
+        this.positions.delete(id);
+        removedCount++;
+      }
+    }
+    
+    if (removedCount > 0) {
+      console.log(`🧹 Cleaned up ${removedCount} old paper trading positions`);
+    }
+    
+    return removedCount;
+  }
+
+  /**
+   * Get total position count
+   */
+  getPositionCount(): number {
+    return this.positions.size;
+  }
+
+  /**
    * Get position by ID
    */
   getPosition(id: string): PaperPosition | undefined {
