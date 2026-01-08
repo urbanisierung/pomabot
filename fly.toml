@@ -13,6 +13,10 @@ primary_region = 'fra'
   API_PORT = '4000'
   NODE_ENV = 'production'
   POLL_INTERVAL = '60000'
+  # Memory optimization settings for 256MB container
+  MAX_MARKETS = '400'
+  MIN_LIQUIDITY = '15000'
+  MAX_SIGNAL_HISTORY = '20'
 
 [http_service]
   internal_port = 4000

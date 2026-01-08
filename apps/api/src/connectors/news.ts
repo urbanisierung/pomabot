@@ -32,6 +32,34 @@ export class NewsAggregator {
   private lastFetchTime: Map<string, number> = new Map();
   private minFetchInterval = 300000; // 5 minutes between fetches per source
   
+  // Memory optimization: Limit the number of tracked feed URLs
+  private readonly MAX_TRACKED_FEEDS = 100;
+
+  /**
+   * Memory optimization: Clean up old fetch timestamps to prevent unbounded growth
+   */
+  cleanupOldFetchTimes(): void {
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    
+    for (const [url, timestamp] of this.lastFetchTime) {
+      if (now - timestamp > maxAge) {
+        this.lastFetchTime.delete(url);
+      }
+    }
+    
+    // If still too large, keep only the most recent entries
+    if (this.lastFetchTime.size > this.MAX_TRACKED_FEEDS) {
+      const entries = Array.from(this.lastFetchTime.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, this.MAX_TRACKED_FEEDS);
+      this.lastFetchTime.clear();
+      for (const [url, timestamp] of entries) {
+        this.lastFetchTime.set(url, timestamp);
+      }
+    }
+  }
+  
   // RSS feeds organized by market category
   // OPTIMIZED: Reduced timeout to 5s, running single instance
   // Removed feeds with consistent issues (apnews DNS, noaa 403)

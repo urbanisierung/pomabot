@@ -80,15 +80,18 @@ console.log(`Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap / ${M
 
 ## Expected Results
 
-### Before Optimization
+### Before Optimization (Original)
 - Memory grows indefinitely
-- App crashes when hitting 256MB limit
+- App crashes when hitting 256MB limit (OOM killed by Fly.io)
 - No cleanup of old data
 - Unknown memory usage patterns
+- All 1000+ markets tracked regardless of liquidity
 
-### After Optimization
-- Bounded memory growth (~150-180MB heap)
-- Automatic cleanup of expired data
+### After Optimization (v2 - January 2026)
+- Bounded memory growth (~100-150MB heap target)
+- Multi-tier cleanup: regular, aggressive, and emergency
+- Market limit of 400-500 highest-liquidity markets
+- Signal history limited to 20-25 per market
 - Predictable memory footprint
 - Clear visibility into memory usage
 
@@ -96,44 +99,94 @@ console.log(`Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap / ${M
 
 | Component | Allocation | Usage |
 |-----------|-----------|-------|
-| Node.js Heap | 200 MB | Application data, market states, signals |
-| V8 Internals | ~30 MB | Code, JIT compilation, native objects |
-| OS/System | ~26 MB | Operating system overhead |
+| Node.js Heap | 180 MB | Application data, market states, signals |
+| V8 Internals | ~40 MB | Code, JIT compilation, native objects |
+| OS/System | ~36 MB | Operating system overhead |
 | **Total** | **256 MB** | **Container limit** |
 
 ## Configuration
 
-All settings are configurable via environment variables or can be adjusted in the code:
+All settings are configurable via environment variables:
+
+```bash
+# Dockerfile / fly.toml defaults
+MAX_MARKETS=400                    # Maximum markets to track
+MIN_LIQUIDITY=15000                # Minimum liquidity filter ($)
+MAX_SIGNAL_HISTORY=20              # Signals to keep per market
+NODE_OPTIONS="--max-old-space-size=180 --expose-gc --optimize-for-size"
+```
+
+### Memory Thresholds
 
 ```typescript
-MAX_SIGNAL_HISTORY = 50          // Number of signals to keep per market
-MARKET_CLEANUP_INTERVAL = 300000 // 5 minutes in milliseconds
-NODE_OPTIONS = "--max-old-space-size=200" // Node.js heap size in MB
+MEMORY_CRITICAL_THRESHOLD = 150 MB  // Triggers aggressive cleanup
+MEMORY_EMERGENCY_THRESHOLD = 180 MB // Triggers emergency cleanup
 ```
+
+## Cleanup Tiers
+
+### 1. Regular Cleanup (every 2 minutes)
+- Remove expired/closed markets
+- Clean up news aggregator fetch timestamps older than 24h
+
+### 2. Aggressive Cleanup (when heap > 150MB)
+- Reduce signal history to 10 per market
+- Trim belief unknowns to 3 max
+- Remove paper trading positions older than 3 days
+- Drop markets exceeding MAX_MARKETS limit
+
+### 3. Emergency Cleanup (when heap > 180MB)
+- Clear ALL signal histories
+- Keep only top 50% markets by liquidity
+- Clear all belief unknowns
+- Remove all resolved paper trading positions
+- Force garbage collection
 
 ## Testing
 
-All existing tests pass:
-- ✓ packages/core: 120 tests
-- ✓ apps/api: 84 tests
-- ✓ TypeScript compilation: No errors
+Memory simulation tests in `apps/api/src/memory-simulation.test.ts`:
+- Market state memory growth measurement
+- Signal history accumulation patterns
+- Full monitoring loop simulation
+- 256MB container limit scenario
+- Realistic production load simulation
 
 ## Monitoring
 
 To monitor memory usage in production:
 
-1. Check logs for periodic memory reports after each monitoring cycle
-2. Check logs for cleanup reports showing removed markets
+1. Check logs for periodic memory reports after each monitoring cycle:
+   ```
+   ✓ Processed 400 markets (8000 signals in memory)
+      Memory: 120MB heap / 180MB RSS
+   ```
+
+2. Check logs for cleanup reports:
+   ```
+   🧹 Cleaned up 15 expired markets (385 remaining)
+   ⚠️ Memory pressure detected (155MB > 150MB threshold)
+   🧹 Performing aggressive memory cleanup...
+   ```
+
 3. Monitor Fly.io metrics dashboard for memory usage trends
-4. Watch for OOM (Out of Memory) crashes in Fly.io logs
 
-## Future Improvements
+4. Watch for emergency cleanup triggers in logs
 
-If memory is still tight, consider:
+## Changelog
 
-1. **Reduce MAX_SIGNAL_HISTORY**: Currently 50, could be reduced to 25-30
-2. **Increase cleanup frequency**: Run every 2-3 minutes instead of 5
-3. **Implement LRU cache**: Remove least-recently-checked markets first
-4. **Stream processing**: Process markets in batches instead of keeping all in memory
-5. **External storage**: Move historical data to Redis or database
-6. **Upgrade instance**: Use 512MB if optimization isn't sufficient
+### v2 (January 2026)
+- Reduced MAX_SIGNAL_HISTORY from 50 to 20-25
+- Added MAX_MARKETS limit (400-500)
+- Added MIN_LIQUIDITY filter ($15,000)
+- Reduced heap limit from 200MB to 180MB
+- Added emergency cleanup tier
+- Added belief unknowns limit
+- Added news aggregator fetch time cleanup
+- More frequent cleanup intervals (2 min vs 5 min)
+- Added --expose-gc and --optimize-for-size Node flags
+- Trade history limited to 100 records from last 7 days
+
+### v1 (Original)
+- Signal history limit of 50
+- Market cleanup every 5 minutes
+- Basic memory pressure detection at 180MB

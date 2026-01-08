@@ -58,9 +58,17 @@ RUN mkdir -p /app/audit-logs
 ENV NODE_ENV=production
 ENV API_PORT=4000
 
-# Memory optimization: Set Node.js memory limit for 256MB container
-# Allocate 200MB to Node.js heap, leaving 56MB for V8 internals and OS
-ENV NODE_OPTIONS="--max-old-space-size=200"
+# Memory optimization for 256MB container:
+# - max-old-space-size=180: Reduced from 200MB to give more headroom for GC
+# - expose-gc: Allows manual garbage collection triggering
+# - gc-interval=100: More frequent GC checks (every 100 allocations)
+# - optimize-for-size: Prefer smaller memory footprint over speed
+ENV NODE_OPTIONS="--max-old-space-size=180 --expose-gc --optimize-for-size"
+
+# Memory optimization: Limit markets to reduce memory footprint
+ENV MAX_MARKETS=400
+ENV MIN_LIQUIDITY=15000
+ENV MAX_SIGNAL_HISTORY=20
 
 # Expose API port
 EXPOSE 4000
