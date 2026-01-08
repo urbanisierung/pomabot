@@ -26,12 +26,18 @@ primary_region = 'fra'
   # regardless of HTTP traffic
   auto_stop_machines = 'off'
   auto_start_machines = true
+  # Set to 1 to keep exactly one machine running, but prevent HA second machine
   min_machines_running = 1
 
   [http_service.concurrency]
     type = 'requests'
     hard_limit = 200
     soft_limit = 100
+
+[deploy]
+  # CRITICAL: Disable high availability to prevent duplicate machines
+  # This is a background worker app that should have exactly 1 instance
+  strategy = 'immediate'
 
 [[vm]]
   # Use the smallest possible VM for cost efficiency
