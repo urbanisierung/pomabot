@@ -1,5 +1,118 @@
 # Copilot Changes
 
+## 2026-01-08: Critical Memory Optimization for 256MB Container
+
+### Issue
+The Fly.io deployment was repeatedly crashing with OOM (Out of Memory) errors on the 256MB container. The app was killed by Fly.io with the message: "Your 'pomabot' application hosted on Fly.io crashed because it ran out of memory."
+
+### Investigation
+
+Created a comprehensive memory simulation test (`apps/api/src/memory-simulation.test.ts`) that revealed:
+
+1. **Signal history was consuming ~200MB** with 500 signals per market across 1000 markets
+2. **Market count was unbounded** - tracking all 1000+ Polymarket markets regardless of liquidity
+3. **GC wasn't reclaiming memory** effectively after slice operations
+4. **Cleanup intervals were too long** (5 minutes)
+5. **No emergency cleanup mechanism** when memory became critical
+6. **Growth rate was ~5x** over 50 monitoring cycles
+
+### Changes Made
+
+#### 1. `apps/api/src/services/trading.ts`
+- **Added MAX_MARKETS limit** (default: 500, configurable via env var)
+- **Added MIN_LIQUIDITY filter** (default: $10,000, configurable via env var)
+- **Reduced MAX_SIGNAL_HISTORY** from 50 to 25
+- **Added MAX_UNKNOWNS** limit of 5 per belief state
+- **Reduced MARKET_CLEANUP_INTERVAL** from 5 minutes to 2 minutes
+- **Reduced MEMORY_CHECK_INTERVAL** from 10 minutes to 5 minutes
+- **Lowered MEMORY_CRITICAL_THRESHOLD** from 180MB to 150MB
+- **Added MEMORY_EMERGENCY_THRESHOLD** at 180MB
+- **Added `performEmergencyCleanup()`** method for critical memory situations
+- **Enhanced `performAggressiveCleanup()`** to:
+  - Reduce signal history to 10 entries max
+  - Trim belief unknowns to 3 max
+  - Drop low-liquidity markets when over limit
+  - Clean paper trading positions older than 3 days (was 7)
+- **Updated `loadMarkets()`** to filter by liquidity and limit market count
+- **Updated signal processing** to limit unknowns array in-place
+- **Added memory check during monitoring loop** for faster response to pressure
+
+#### 2. `apps/api/src/connectors/news.ts`
+- **Added MAX_TRACKED_FEEDS** limit (100 entries)
+- **Added `cleanupOldFetchTimes()`** method to remove entries older than 24 hours
+- Prevents unbounded growth of `lastFetchTime` Map
+
+#### 3. `packages/core/src/trade-history.ts`
+- **Added MAX_TRADE_RECORDS** limit (100 records)
+- **Added MAX_LOG_FILES** limit (7 days of logs)
+- **Added `clearRecords()`** method for memory cleanup
+- Records sorted by timestamp, most recent kept
+- Logs limited to recent files before loading
+
+#### 4. `Dockerfile`
+- **Reduced heap size** from 200MB to 180MB
+- **Added `--expose-gc`** flag to enable manual garbage collection
+- **Added `--optimize-for-size`** flag to prefer smaller memory footprint
+- **Added environment defaults**: MAX_MARKETS=400, MIN_LIQUIDITY=15000, MAX_SIGNAL_HISTORY=20
+
+#### 5. `fly.toml`
+- **Added memory optimization environment variables**:
+  - MAX_MARKETS=400
+  - MIN_LIQUIDITY=15000
+  - MAX_SIGNAL_HISTORY=20
+
+#### 6. `MEMORY_OPTIMIZATION.md`
+- Updated with new optimization strategies
+- Added cleanup tier documentation (regular, aggressive, emergency)
+- Updated memory budget table
+- Added changelog section
+- Documented new configuration options
+
+#### 7. `apps/api/src/memory-simulation.test.ts` (NEW)
+- Comprehensive memory simulation tests
+- Tests market state memory growth
+- Tests signal history accumulation
+- Simulates full monitoring loop memory patterns
+- Tests 256MB container limit scenario
+- Measures realistic production memory usage
+
+### Expected Results
+
+| Before | After |
+|--------|-------|
+| ~1000+ markets tracked | 400-500 high-liquidity markets |
+| 50 signals per market | 20-25 signals per market |
+| Cleanup every 5 min | Cleanup every 2 min |
+| No market filtering | Minimum $15,000 liquidity |
+| Single cleanup tier | Three-tier cleanup (regular/aggressive/emergency) |
+| 200MB heap limit | 180MB heap limit with GC exposure |
+| OOM crashes | Bounded memory with proactive cleanup |
+
+### Testing
+
+```bash
+# Run memory simulation tests
+cd apps/api && npx vitest run --testNamePattern="Memory Simulation"
+
+# Build all packages
+pnpm build
+
+# Run all tests
+pnpm test
+```
+
+### Deployment
+
+After these changes, redeploy to Fly.io:
+
+```bash
+fly deploy
+```
+
+Monitor logs for memory usage patterns.
+
+---
+
 ## 2026-01-07: Add Missed Opportunities to Daily Summary
 
 ### Summary

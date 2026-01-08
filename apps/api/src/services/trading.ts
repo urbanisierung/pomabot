@@ -62,11 +62,15 @@ export class TradingService {
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
   
-  // Memory management constants
-  private readonly MAX_SIGNAL_HISTORY = 50; // Keep only last 50 signals per market
-  private readonly MARKET_CLEANUP_INTERVAL = 5 * 60 * 1000; // Clean up markets every 5 minutes
-  private readonly MEMORY_CHECK_INTERVAL = 10 * 60 * 1000; // Check memory every 10 minutes
-  private readonly MEMORY_CRITICAL_THRESHOLD = 180; // MB - trigger aggressive cleanup
+  // Memory management constants - TUNED FOR 256MB CONTAINER
+  private readonly MAX_MARKETS = parseInt(process.env.MAX_MARKETS ?? "500", 10); // Limit tracked markets (was unlimited)
+  private readonly MIN_LIQUIDITY = parseFloat(process.env.MIN_LIQUIDITY ?? "10000"); // Only track liquid markets
+  private readonly MAX_SIGNAL_HISTORY = parseInt(process.env.MAX_SIGNAL_HISTORY ?? "25", 10); // Reduced from 50 to 25
+  private readonly MAX_UNKNOWNS = 5; // Limit belief unknowns array
+  private readonly MARKET_CLEANUP_INTERVAL = 2 * 60 * 1000; // Clean up markets every 2 minutes (was 5)
+  private readonly MEMORY_CHECK_INTERVAL = 5 * 60 * 1000; // Check memory every 5 minutes (was 10)
+  private readonly MEMORY_CRITICAL_THRESHOLD = 150; // MB - trigger aggressive cleanup (was 180)
+  private readonly MEMORY_EMERGENCY_THRESHOLD = 180; // MB - trigger emergency cleanup
   
   // Track service start time for uptime calculation
   private startTime = new Date();
@@ -286,12 +290,72 @@ export class TradingService {
     const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
     const rssMB = Math.round(memUsage.rss / 1024 / 1024);
     
-    console.log(`🧠 Memory check: ${heapUsedMB}MB heap / ${rssMB}MB RSS`);
+    console.log(`🧠 Memory check: ${heapUsedMB}MB heap / ${rssMB}MB RSS | Markets: ${this.marketStates.size}`);
     
-    if (heapUsedMB > this.MEMORY_CRITICAL_THRESHOLD) {
+    if (heapUsedMB > this.MEMORY_EMERGENCY_THRESHOLD) {
+      console.error(`🚨 EMERGENCY: Memory critical (${heapUsedMB}MB > ${this.MEMORY_EMERGENCY_THRESHOLD}MB)`);
+      this.performEmergencyCleanup();
+    } else if (heapUsedMB > this.MEMORY_CRITICAL_THRESHOLD) {
       console.warn(`⚠️ Memory pressure detected (${heapUsedMB}MB > ${this.MEMORY_CRITICAL_THRESHOLD}MB threshold)`);
       this.performAggressiveCleanup();
     }
+    
+    // Also clean up news aggregator fetch times
+    this.news.cleanupOldFetchTimes();
+  }
+
+  /**
+   * Emergency cleanup when memory is critically high
+   */
+  private performEmergencyCleanup(): void {
+    console.log("🚨 Performing EMERGENCY memory cleanup...");
+    
+    // 1. Clear ALL signal histories
+    let signalsCleared = 0;
+    for (const [_marketId, state] of this.marketStates) {
+      signalsCleared += state.signalHistory.length;
+      state.signalHistory.length = 0; // Clear in-place
+    }
+    console.log(`   Cleared ${signalsCleared} signals`);
+    
+    // 2. Remove lowest-liquidity markets to stay under MAX_MARKETS
+    const targetMarkets = Math.floor(this.MAX_MARKETS * 0.5); // Keep only 50% of max
+    if (this.marketStates.size > targetMarkets) {
+      const sortedMarkets = Array.from(this.marketStates.entries())
+        .sort((a, b) => (b[1].market.liquidity ?? 0) - (a[1].market.liquidity ?? 0));
+      
+      const toKeep = sortedMarkets.slice(0, targetMarkets);
+      const removedCount = this.marketStates.size - targetMarkets;
+      
+      this.marketStates.clear();
+      for (const [id, state] of toKeep) {
+        this.marketStates.set(id, state);
+      }
+      console.log(`   Dropped ${removedCount} low-liquidity markets`);
+    }
+    
+    // 3. Clear all belief unknowns
+    for (const [_marketId, state] of this.marketStates) {
+      state.belief.unknowns = [];
+    }
+    
+    // 4. Clean up ALL resolved paper trading positions
+    if (this.paperTradingEnabled) {
+      const removedPositions = this.paperTrading.cleanupOldPositions(0); // Remove all resolved
+      console.log(`   Cleaned up ${removedPositions} resolved paper positions`);
+    }
+    
+    // 5. Clear missed opportunities
+    this.missedOpportunities.length = 0;
+    
+    // 6. Force garbage collection
+    if (global.gc) {
+      global.gc();
+      console.log("   Forced garbage collection");
+    }
+    
+    const memUsage = process.memoryUsage();
+    console.log(`   Post-emergency: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap`);
   }
 
   /**
@@ -300,25 +364,47 @@ export class TradingService {
   private performAggressiveCleanup(): void {
     console.log("🧹 Performing aggressive memory cleanup...");
     
-    // 1. Reduce signal history to half
+    // 1. Reduce signal history to 10 signals max
+    const aggressiveLimit = 10;
     let signalsRemoved = 0;
     for (const [_marketId, state] of this.marketStates) {
-      const halfLimit = Math.floor(this.MAX_SIGNAL_HISTORY / 2);
-      if (state.signalHistory.length > halfLimit) {
-        const toRemove = state.signalHistory.length - halfLimit;
-        state.signalHistory = state.signalHistory.slice(-halfLimit);
+      if (state.signalHistory.length > aggressiveLimit) {
+        const toRemove = state.signalHistory.length - aggressiveLimit;
+        state.signalHistory = state.signalHistory.slice(-aggressiveLimit);
         signalsRemoved += toRemove;
       }
     }
     console.log(`   Trimmed ${signalsRemoved} signals from history`);
     
-    // 2. Clean up resolved paper trading positions older than 7 days
+    // 2. Trim belief unknowns
+    for (const [_marketId, state] of this.marketStates) {
+      if (state.belief.unknowns && state.belief.unknowns.length > 3) {
+        state.belief.unknowns = state.belief.unknowns.slice(-3);
+      }
+    }
+    
+    // 3. Clean up resolved paper trading positions older than 3 days (was 7)
     if (this.paperTradingEnabled) {
-      const removedPositions = this.paperTrading.cleanupOldPositions(7);
+      const removedPositions = this.paperTrading.cleanupOldPositions(3);
       console.log(`   Cleaned up ${removedPositions} old resolved positions`);
     }
     
-    // 3. Force garbage collection if available
+    // 4. Drop low-liquidity markets if over limit
+    if (this.marketStates.size > this.MAX_MARKETS) {
+      const sortedMarkets = Array.from(this.marketStates.entries())
+        .sort((a, b) => (b[1].market.liquidity ?? 0) - (a[1].market.liquidity ?? 0));
+      
+      const toKeep = sortedMarkets.slice(0, this.MAX_MARKETS);
+      const removedCount = this.marketStates.size - this.MAX_MARKETS;
+      
+      this.marketStates.clear();
+      for (const [id, state] of toKeep) {
+        this.marketStates.set(id, state);
+      }
+      console.log(`   Dropped ${removedCount} low-liquidity markets`);
+    }
+    
+    // 5. Force garbage collection if available
     if (global.gc) {
       global.gc();
       console.log("   Forced garbage collection");
@@ -357,12 +443,25 @@ export class TradingService {
       for (const [marketId, state] of this.marketStates) {
         await this.processMarket(marketId, state, news);
       }
-
-      console.log(`✓ Processed ${this.marketStates.size} markets`);
       
-      // Memory monitoring: Log memory usage periodically
+      // Calculate total signals for memory stats
+      let totalSignals = 0;
+      for (const [_, state] of this.marketStates) {
+        totalSignals += state.signalHistory.length;
+      }
+
+      console.log(`✓ Processed ${this.marketStates.size} markets (${totalSignals} signals in memory)`);
+      
+      // Memory monitoring: Log memory usage and check for pressure every loop
       const memUsage = process.memoryUsage();
-      console.log(`   Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap / ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
+      const heapMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+      const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+      console.log(`   Memory: ${heapMB}MB heap / ${rssMB}MB RSS`);
+      
+      // Inline memory pressure check during loop for faster response
+      if (heapMB > this.MEMORY_CRITICAL_THRESHOLD) {
+        this.checkMemoryPressure();
+      }
 
 
     } catch (error) {
@@ -373,13 +472,26 @@ export class TradingService {
 
   /**
    * Load initial markets from Polymarket
+   * Memory optimization: Limit to top markets by liquidity
    */
   private async loadMarkets(): Promise<void> {
     console.log("📊 Loading markets from Polymarket...");
     
-    const markets = await this.polymarket.fetchMarkets();
+    let markets = await this.polymarket.fetchMarkets();
     
-    console.log(`Found ${markets.length} active markets`);
+    console.log(`Found ${markets.length} active markets from API`);
+    
+    // Memory optimization: Filter by minimum liquidity
+    markets = markets.filter(m => (m.liquidity ?? 0) >= this.MIN_LIQUIDITY);
+    console.log(`After liquidity filter (>=$${this.MIN_LIQUIDITY}): ${markets.length} markets`);
+    
+    // Memory optimization: Sort by liquidity and take top MAX_MARKETS
+    if (markets.length > this.MAX_MARKETS) {
+      markets = markets
+        .sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0))
+        .slice(0, this.MAX_MARKETS);
+      console.log(`Limited to top ${this.MAX_MARKETS} markets by liquidity`);
+    }
 
     for (const market of markets) {
       // Initialize belief state for new markets
@@ -392,6 +504,8 @@ export class TradingService {
         });
       }
     }
+    
+    console.log(`Tracking ${this.marketStates.size} markets`);
   }
 
   /**
@@ -543,11 +657,20 @@ export class TradingService {
           this.stateMachine.transition("UPDATE_BELIEF", "Belief updated");
 
           state.belief = updatedBelief;
+          
+          // Memory optimization: Limit unknowns array
+          if (state.belief.unknowns && state.belief.unknowns.length > this.MAX_UNKNOWNS) {
+            state.belief.unknowns = state.belief.unknowns.slice(-this.MAX_UNKNOWNS);
+          }
+          
           state.signalHistory.push(signal);
           
           // Memory optimization: Keep only the most recent signals
           if (state.signalHistory.length > this.MAX_SIGNAL_HISTORY) {
-            state.signalHistory = state.signalHistory.slice(-this.MAX_SIGNAL_HISTORY);
+            // Use in-place modification to help GC
+            const keep = state.signalHistory.slice(-this.MAX_SIGNAL_HISTORY);
+            state.signalHistory.length = 0;
+            state.signalHistory.push(...keep);
           }
           
           // Track belief update for daily summary
@@ -953,16 +1076,21 @@ export class TradingService {
 
   /**
    * Phase 7: Get performance metrics from trade history
+   * Memory optimized: clears records after use
    */
   async getPerformanceMetrics() {
     await this.tradeHistory.loadTradeHistory();
     const metrics = this.tradeHistory.calculatePerformanceMetrics();
     const patterns = this.tradeHistory.analyzePatterns();
+    const recentTrades = this.tradeHistory.getRecentTrades(30);
+    
+    // Memory optimization: Clear records after extracting data
+    this.tradeHistory.clearRecords();
     
     return {
       metrics,
       patterns,
-      recentTrades: this.tradeHistory.getRecentTrades(30),
+      recentTrades,
     };
   }
 

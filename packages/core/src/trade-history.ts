@@ -50,26 +50,46 @@ export interface PatternAnalysis {
 
 /**
  * TradeHistoryAnalyzer - Analyzes historical trading performance
+ * Memory optimized: limits records and files loaded
  */
 export class TradeHistoryAnalyzer {
   private logDir: string;
   private tradeRecords: TradeRecord[] = [];
+  
+  // Memory optimization: Limit stored records
+  private readonly MAX_TRADE_RECORDS = 100;
+  private readonly MAX_LOG_FILES = 7; // Only load last 7 days of logs
 
   constructor(logDir: string = "./audit-logs") {
     this.logDir = logDir;
   }
+  
+  /**
+   * Clear loaded trade records to free memory
+   */
+  clearRecords(): void {
+    this.tradeRecords.length = 0;
+  }
 
   /**
    * Load trade history from audit logs
+   * Memory optimized: Only loads recent files and limits records
    */
   async loadTradeHistory(): Promise<void> {
     if (!existsSync(this.logDir)) {
       console.warn(`Audit log directory not found: ${this.logDir}`);
       return;
     }
+    
+    // Clear any existing records to prevent accumulation
+    this.tradeRecords.length = 0;
 
     const files = await readdir(this.logDir);
-    const csvFiles = files.filter((f) => f.endsWith(".csv"));
+    // Sort by date descending and take only recent files
+    const csvFiles = files
+      .filter((f) => f.endsWith(".csv"))
+      .sort((a, b) => b.localeCompare(a)) // Reverse sort for most recent first
+      .slice(0, this.MAX_LOG_FILES);
 
     const trades = new Map<string, Partial<TradeRecord>>();
 
@@ -126,8 +146,15 @@ export class TradeHistoryAnalyzer {
         this.tradeRecords.push(trade as TradeRecord);
       }
     }
+    
+    // Memory optimization: Limit total records, keeping most recent
+    if (this.tradeRecords.length > this.MAX_TRADE_RECORDS) {
+      // Sort by timestamp descending and keep most recent
+      this.tradeRecords.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      this.tradeRecords.length = this.MAX_TRADE_RECORDS;
+    }
 
-    console.log(`Loaded ${this.tradeRecords.length} trade records`);
+    console.log(`Loaded ${this.tradeRecords.length} trade records (limited to ${this.MAX_TRADE_RECORDS})`);
   }
 
   /**
