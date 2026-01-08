@@ -61,9 +61,8 @@ ENV API_PORT=4000
 # Memory optimization for 256MB container:
 # - max-old-space-size=180: Reduced from 200MB to give more headroom for GC
 # - expose-gc: Allows manual garbage collection triggering
-# - gc-interval=100: More frequent GC checks (every 100 allocations)
-# - optimize-for-size: Prefer smaller memory footprint over speed
-ENV NODE_OPTIONS="--max-old-space-size=180 --expose-gc --optimize-for-size"
+# Note: --optimize-for-size is NOT allowed in NODE_OPTIONS
+ENV NODE_OPTIONS="--max-old-space-size=180 --expose-gc"
 
 # Memory optimization: Limit markets to reduce memory footprint
 ENV MAX_MARKETS=400
