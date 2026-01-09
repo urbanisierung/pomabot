@@ -481,16 +481,28 @@ export class TradingService {
     
     console.log(`Found ${markets.length} active markets from API`);
     
-    // Memory optimization: Filter by minimum liquidity
-    markets = markets.filter(m => (m.liquidity ?? 0) >= this.MIN_LIQUIDITY);
-    console.log(`After liquidity filter (>=$${this.MIN_LIQUIDITY}): ${markets.length} markets`);
+    // Check if liquidity data is available (CLOB API doesn't provide it)
+    const hasLiquidityData = markets.some(m => (m.liquidity ?? 0) > 0);
     
-    // Memory optimization: Sort by liquidity and take top MAX_MARKETS
-    if (markets.length > this.MAX_MARKETS) {
-      markets = markets
-        .sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0))
-        .slice(0, this.MAX_MARKETS);
-      console.log(`Limited to top ${this.MAX_MARKETS} markets by liquidity`);
+    if (hasLiquidityData) {
+      // Memory optimization: Filter by minimum liquidity (only if data is available)
+      markets = markets.filter(m => (m.liquidity ?? 0) >= this.MIN_LIQUIDITY);
+      console.log(`After liquidity filter (>=$${this.MIN_LIQUIDITY}): ${markets.length} markets`);
+      
+      // Memory optimization: Sort by liquidity and take top MAX_MARKETS
+      if (markets.length > this.MAX_MARKETS) {
+        markets = markets
+          .sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0))
+          .slice(0, this.MAX_MARKETS);
+        console.log(`Limited to top ${this.MAX_MARKETS} markets by liquidity`);
+      }
+    } else {
+      // No liquidity data available - just limit by MAX_MARKETS
+      console.log(`⚠️ No liquidity data from API - skipping liquidity filter`);
+      if (markets.length > this.MAX_MARKETS) {
+        markets = markets.slice(0, this.MAX_MARKETS);
+        console.log(`Limited to first ${this.MAX_MARKETS} markets`);
+      }
     }
 
     for (const market of markets) {

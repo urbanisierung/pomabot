@@ -1,5 +1,47 @@
 # Copilot Changes
 
+## 2026-01-09: Fix 0 Markets Issue - CLOB API Doesn't Return Liquidity
+
+### Issue
+The startup and daily summary Slack messages were showing "0 Markets" instead of the expected 100+ markets. This was caused by the recent memory optimization changes that added a liquidity filter.
+
+### Root Cause
+The Polymarket CLOB API (`https://clob.polymarket.com/markets`) does not return liquidity data in its response. The `liquidity` field is missing from the API response, causing all markets to have a liquidity value of `0` after transformation.
+
+The memory optimization code added a filter requiring `liquidity >= MIN_LIQUIDITY` (default: $15,000), which filtered out **all** markets since none had liquidity data.
+
+**API Response (CLOB API - what we use):**
+- Fields: `condition_id`, `question`, `description`, `end_date_iso`, `tokens`, etc.
+- **Missing**: `liquidity`, `volume`
+
+**Gamma API (has liquidity data but not used):**
+- Has `liquidity` and `volume` fields
+- Returns values like `"41641.99771"` for liquidity
+
+### Fix
+Modified `loadMarkets()` in [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts):
+
+1. **Detect if liquidity data is available** by checking if any market has `liquidity > 0`
+2. **Skip liquidity filter** when no liquidity data is present
+3. **Still enforce MAX_MARKETS limit** to prevent memory issues
+4. **Log warning** when liquidity filtering is skipped
+
+### Changes Made
+- Added `hasLiquidityData` check before applying liquidity filter
+- When no liquidity data: skip filter and just limit by MAX_MARKETS
+- Added console warning when liquidity filter is skipped
+
+### Result
+- Before: 0 markets tracked (all filtered out due to no liquidity data)
+- After: Up to MAX_MARKETS (212 active markets from API, limited to 400 max)
+
+### Verification
+```bash
+pnpm build && pnpm test  # All 232 tests pass
+```
+
+---
+
 ## 2026-01-08: Critical Memory Optimization for 256MB Container
 
 ### Issue
