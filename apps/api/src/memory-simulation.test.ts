@@ -557,9 +557,9 @@ describe("Memory Simulation Tests", () => {
 
     it("should measure realistic production scenario memory usage", () => {
       /**
-       * Simulate realistic production load:
-       * - 1000-1500 active markets
-       * - 50 signals per market max
+       * Simulate realistic production load (v3 optimized):
+       * - 300 active markets (MAX_MARKETS reduced from 400)
+       * - 15 signals per market max (MAX_SIGNAL_HISTORY reduced from 20)
        * - 100 paper trading positions
        * - News aggregator state
        * - Trade history (50 trades)
@@ -568,9 +568,9 @@ describe("Memory Simulation Tests", () => {
       if (global.gc) global.gc();
       const baseline = getMemorySnapshot();
       
-      // Market states
+      // Market states (reduced from 1200 to 300)
       const marketStates = new Map<string, MockMarketState>();
-      for (let i = 0; i < 1200; i++) {
+      for (let i = 0; i < 300; i++) {
         const id = `market-${i}`;
         const state: MockMarketState = {
           market: createMockMarket(id),
@@ -586,8 +586,8 @@ describe("Memory Simulation Tests", () => {
           lastChecked: new Date(),
         };
         
-        // 70% of markets have some signals
-        const signalCount = Math.random() < 0.7 ? Math.floor(Math.random() * 50) : 0;
+        // 70% of markets have some signals (reduced max from 50 to 15)
+        const signalCount = Math.random() < 0.7 ? Math.floor(Math.random() * 15) : 0;
         for (let j = 0; j < signalCount; j++) {
           state.signalHistory.push(createMockSignal(id));
         }
@@ -686,9 +686,16 @@ describe("Memory Simulation Tests", () => {
       console.log(`RSS: ${formatMemoryMB(afterSetup.rss)} MB`);
       console.log("-".repeat(60));
       
-      // Should fit in 200MB heap limit with room to spare
+      // v3 target: Should fit in 160MB heap limit with plenty of headroom
+      // Expect growth to be under 80MB to leave 80MB+ headroom
       const heapMB = parseFloat(formatMemoryMB(afterSetup.heapUsed - baseline.heapUsed));
-      expect(heapMB).toBeLessThan(150); // Leave 50MB headroom
+      expect(heapMB).toBeLessThan(80); // Aggressive target: leave 80MB+ headroom for 160MB heap
+      
+      // Note: RSS in test environment includes test infrastructure overhead (~160MB baseline)
+      // In production, baseline is much lower (~60-80MB), so actual RSS will be around 140-160MB
+      // Here we just verify RSS stays under 256MB limit with reasonable margin
+      const rssMB = parseFloat(formatMemoryMB(afterSetup.rss));
+      expect(rssMB).toBeLessThan(250); // Stay under 250MB RSS (leaves 6MB margin for container)
     });
   });
 });

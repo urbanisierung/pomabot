@@ -59,15 +59,15 @@ ENV NODE_ENV=production
 ENV API_PORT=4000
 
 # Memory optimization for 256MB container:
-# - max-old-space-size=180: Reduced from 200MB to give more headroom for GC
+# - max-old-space-size=160: Reduced from 180MB to 160MB for better headroom
 # - expose-gc: Allows manual garbage collection triggering
 # Note: --optimize-for-size is NOT allowed in NODE_OPTIONS
-ENV NODE_OPTIONS="--max-old-space-size=180 --expose-gc"
+ENV NODE_OPTIONS="--max-old-space-size=160 --expose-gc"
 
-# Memory optimization: Limit markets to reduce memory footprint
-ENV MAX_MARKETS=400
+# Memory optimization: Aggressively limit markets to reduce memory footprint
+ENV MAX_MARKETS=300
 ENV MIN_LIQUIDITY=15000
-ENV MAX_SIGNAL_HISTORY=20
+ENV MAX_SIGNAL_HISTORY=15
 
 # Expose API port
 EXPOSE 4000
