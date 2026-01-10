@@ -14,8 +14,8 @@ primary_region = 'fra'
 
 [env]
   API_PORT = '4000'
-  MAX_MARKETS = '400'
-  MAX_SIGNAL_HISTORY = '20'
+  MAX_MARKETS = '300'
+  MAX_SIGNAL_HISTORY = '15'
   MIN_LIQUIDITY = '15000'
   NODE_ENV = 'production'
   POLL_INTERVAL = '60000'

@@ -62,15 +62,15 @@ export class TradingService {
   private marketStates: Map<string, MarketState> = new Map();
   private pollInterval = parseInt(process.env.POLL_INTERVAL ?? "60000", 10); // Default 60s, configurable
   
-  // Memory management constants - TUNED FOR 256MB CONTAINER
-  private readonly MAX_MARKETS = parseInt(process.env.MAX_MARKETS ?? "500", 10); // Limit tracked markets (was unlimited)
+  // Memory management constants - AGGRESSIVELY TUNED FOR 256MB CONTAINER
+  private readonly MAX_MARKETS = parseInt(process.env.MAX_MARKETS ?? "300", 10); // Reduced from 500 to 300
   private readonly MIN_LIQUIDITY = parseFloat(process.env.MIN_LIQUIDITY ?? "10000"); // Only track liquid markets
-  private readonly MAX_SIGNAL_HISTORY = parseInt(process.env.MAX_SIGNAL_HISTORY ?? "25", 10); // Reduced from 50 to 25
-  private readonly MAX_UNKNOWNS = 5; // Limit belief unknowns array
-  private readonly MARKET_CLEANUP_INTERVAL = 2 * 60 * 1000; // Clean up markets every 2 minutes (was 5)
-  private readonly MEMORY_CHECK_INTERVAL = 5 * 60 * 1000; // Check memory every 5 minutes (was 10)
-  private readonly MEMORY_CRITICAL_THRESHOLD = 150; // MB - trigger aggressive cleanup (was 180)
-  private readonly MEMORY_EMERGENCY_THRESHOLD = 180; // MB - trigger emergency cleanup
+  private readonly MAX_SIGNAL_HISTORY = parseInt(process.env.MAX_SIGNAL_HISTORY ?? "15", 10); // Reduced from 25 to 15
+  private readonly MAX_UNKNOWNS = 3; // Reduced from 5 to 3
+  private readonly MARKET_CLEANUP_INTERVAL = 1 * 60 * 1000; // Clean up markets every 1 minute (was 2)
+  private readonly MEMORY_CHECK_INTERVAL = 2 * 60 * 1000; // Check memory every 2 minutes (was 5)
+  private readonly MEMORY_CRITICAL_THRESHOLD = 120; // MB - trigger aggressive cleanup (was 150)
+  private readonly MEMORY_EMERGENCY_THRESHOLD = 140; // MB - trigger emergency cleanup (was 180)
   
   // Track service start time for uptime calculation
   private startTime = new Date();
@@ -318,8 +318,8 @@ export class TradingService {
     }
     console.log(`   Cleared ${signalsCleared} signals`);
     
-    // 2. Remove lowest-liquidity markets to stay under MAX_MARKETS
-    const targetMarkets = Math.floor(this.MAX_MARKETS * 0.5); // Keep only 50% of max
+    // 2. Remove lowest-liquidity markets to stay under 40% of MAX_MARKETS (more aggressive)
+    const targetMarkets = Math.floor(this.MAX_MARKETS * 0.4); // Keep only 40% of max
     if (this.marketStates.size > targetMarkets) {
       const sortedMarkets = Array.from(this.marketStates.entries())
         .sort((a, b) => (b[1].market.liquidity ?? 0) - (a[1].market.liquidity ?? 0));
@@ -331,7 +331,7 @@ export class TradingService {
       for (const [id, state] of toKeep) {
         this.marketStates.set(id, state);
       }
-      console.log(`   Dropped ${removedCount} low-liquidity markets`);
+      console.log(`   Dropped ${removedCount} low-liquidity markets (keeping only top ${targetMarkets})`);
     }
     
     // 3. Clear all belief unknowns
@@ -348,14 +348,29 @@ export class TradingService {
     // 5. Clear missed opportunities
     this.missedOpportunities.length = 0;
     
-    // 6. Force garbage collection
+    // 6. Clear trade history analyzer data (if exists)
+    if (this.tradeHistory) {
+      try {
+        // Clear records from memory
+        this.tradeHistory.clearRecords();
+        console.log("   Cleared trade history records");
+      } catch (e) {
+        // Ignore if clearRecords doesn't exist
+      }
+    }
+    
+    // 7. Force garbage collection multiple times
     if (global.gc) {
       global.gc();
-      console.log("   Forced garbage collection");
+      // Wait a bit and GC again for better cleanup
+      setTimeout(() => {
+        if (global.gc) global.gc();
+      }, 100);
+      console.log("   Forced garbage collection (2x)");
     }
     
     const memUsage = process.memoryUsage();
-    console.log(`   Post-emergency: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap`);
+    console.log(`   Post-emergency: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB heap / ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
   }
 
   /**
@@ -364,38 +379,40 @@ export class TradingService {
   private performAggressiveCleanup(): void {
     console.log("🧹 Performing aggressive memory cleanup...");
     
-    // 1. Reduce signal history to 10 signals max
-    const aggressiveLimit = 10;
+    // 1. Reduce signal history to 5 signals max (more aggressive)
+    const aggressiveLimit = 5;
     let signalsRemoved = 0;
     for (const [_marketId, state] of this.marketStates) {
       if (state.signalHistory.length > aggressiveLimit) {
         const toRemove = state.signalHistory.length - aggressiveLimit;
+        state.signalHistory.length = 0; // Clear completely first
         state.signalHistory = state.signalHistory.slice(-aggressiveLimit);
         signalsRemoved += toRemove;
       }
     }
     console.log(`   Trimmed ${signalsRemoved} signals from history`);
     
-    // 2. Trim belief unknowns
+    // 2. Trim belief unknowns to 2 (more aggressive)
     for (const [_marketId, state] of this.marketStates) {
-      if (state.belief.unknowns && state.belief.unknowns.length > 3) {
-        state.belief.unknowns = state.belief.unknowns.slice(-3);
+      if (state.belief.unknowns && state.belief.unknowns.length > 2) {
+        state.belief.unknowns = state.belief.unknowns.slice(-2);
       }
     }
     
-    // 3. Clean up resolved paper trading positions older than 3 days (was 7)
+    // 3. Clean up resolved paper trading positions older than 1 day (more aggressive)
     if (this.paperTradingEnabled) {
-      const removedPositions = this.paperTrading.cleanupOldPositions(3);
+      const removedPositions = this.paperTrading.cleanupOldPositions(1);
       console.log(`   Cleaned up ${removedPositions} old resolved positions`);
     }
     
-    // 4. Drop low-liquidity markets if over limit
-    if (this.marketStates.size > this.MAX_MARKETS) {
+    // 4. Drop low-liquidity markets if over 80% of limit (more aggressive threshold)
+    const targetMarkets = Math.floor(this.MAX_MARKETS * 0.8);
+    if (this.marketStates.size > targetMarkets) {
       const sortedMarkets = Array.from(this.marketStates.entries())
         .sort((a, b) => (b[1].market.liquidity ?? 0) - (a[1].market.liquidity ?? 0));
       
-      const toKeep = sortedMarkets.slice(0, this.MAX_MARKETS);
-      const removedCount = this.marketStates.size - this.MAX_MARKETS;
+      const toKeep = sortedMarkets.slice(0, targetMarkets);
+      const removedCount = this.marketStates.size - targetMarkets;
       
       this.marketStates.clear();
       for (const [id, state] of toKeep) {
@@ -404,7 +421,10 @@ export class TradingService {
       console.log(`   Dropped ${removedCount} low-liquidity markets`);
     }
     
-    // 5. Force garbage collection if available
+    // 5. Clear missed opportunities to free space
+    this.missedOpportunities.length = 0;
+    
+    // 6. Force garbage collection if available
     if (global.gc) {
       global.gc();
       console.log("   Forced garbage collection");
@@ -678,11 +698,10 @@ export class TradingService {
           state.signalHistory.push(signal);
           
           // Memory optimization: Keep only the most recent signals
+          // Use splice instead of slice+push to reduce allocations
           if (state.signalHistory.length > this.MAX_SIGNAL_HISTORY) {
-            // Use in-place modification to help GC
-            const keep = state.signalHistory.slice(-this.MAX_SIGNAL_HISTORY);
-            state.signalHistory.length = 0;
-            state.signalHistory.push(...keep);
+            const removeCount = state.signalHistory.length - this.MAX_SIGNAL_HISTORY;
+            state.signalHistory.splice(0, removeCount);
           }
           
           // Track belief update for daily summary
