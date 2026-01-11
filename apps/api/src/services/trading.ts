@@ -885,7 +885,7 @@ export class TradingService {
   
   /**
    * Track a missed opportunity (evaluated but not traded)
-   * Keeps top 5 by potential edge
+   * Keeps top 5 by potential edge, no duplicates
    */
   private trackMissedOpportunity(state: MarketState, reason: string): void {
     const beliefMidpoint = (state.belief.belief_low + state.belief.belief_high) / 2;
@@ -894,6 +894,28 @@ export class TradingService {
     
     // Only track if there's some edge potential (at least 3%)
     if (potentialEdge < 3) {
+      return;
+    }
+    
+    // Check if this market already exists in missed opportunities
+    const existingIndex = this.missedOpportunities.findIndex(
+      (opp) => opp.marketQuestion === state.market.question
+    );
+    
+    if (existingIndex !== -1) {
+      // Update existing entry if the new edge is better
+      const existing = this.missedOpportunities[existingIndex];
+      if (existing && potentialEdge > existing.potentialEdge) {
+        this.missedOpportunities[existingIndex] = {
+          marketQuestion: state.market.question,
+          reason,
+          beliefMidpoint,
+          marketPrice,
+          potentialEdge,
+        };
+        // Re-sort after update
+        this.missedOpportunities.sort((a, b) => b.potentialEdge - a.potentialEdge);
+      }
       return;
     }
     
