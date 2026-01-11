@@ -1,5 +1,32 @@
 # Copilot Changes
 
+## 2026-01-11: Fix Duplicate Missed Opportunities
+
+### Issue
+The trading engine's missed opportunities list could show duplicate entries for the same market when the market was evaluated multiple times across different polling cycles.
+
+### Root Cause
+The `trackMissedOpportunity()` method was adding opportunities to the list without checking if the same market already existed. Since markets are evaluated in each polling cycle, the same market could appear multiple times in the missed opportunities list.
+
+### Fix
+Modified `trackMissedOpportunity()` in [apps/api/src/services/trading.ts](apps/api/src/services/trading.ts#L890):
+
+1. **Check for existing entries** by comparing `marketQuestion` before adding a new opportunity
+2. **Update existing entries** if the new evaluation shows a better potential edge
+3. **Re-sort after updates** to maintain proper ordering by edge
+
+### Changes Made
+- Added duplicate detection using `findIndex()` on `marketQuestion`
+- If market exists with lower edge: update the entry with new values
+- If market exists with higher edge: keep existing entry (no changes)
+- If market doesn't exist: add as before
+
+### Result
+- Each market now appears at most once in the missed opportunities list
+- The entry reflects the best (highest) potential edge observed for that market
+
+---
+
 ## 2026-01-10: Fix Flaky Memory Simulation Test
 
 ### Issue
